@@ -1,0 +1,47 @@
+[
+  {
+    "id": "lab-001",
+    "labNo": "101",
+    "name": "Computer Lab - A",
+    "collegeId": "col-001",
+    "capacity": 30,
+    "description": "Main computer laboratory with high-spec systems",
+    "assignedAssistant": "assist-001"
+  },
+  {
+    "id": "lab-002",
+    "labNo": "102",
+    "name": "Computer Lab - B",
+    "collegeId": "col-001",
+    "capacity": 25,
+    "description": "Secondary lab for programming courses",
+    "assignedAssistant": "assist-002"
+  },
+  {
+    "id": "lab-003",
+    "labNo": "103",
+    "name": "Database Lab",
+    "collegeId": "col-001",
+    "capacity": 20,
+    "description": "Specialized lab for database management systems",
+    "assignedAssistant": "assist-003"
+  },
+  {
+    "id": "lab-004",
+    "labNo": "201",
+    "name": "AI/ML Lab",
+    "collegeId": "col-002",
+    "capacity": 20,
+    "description": "Advanced laboratory for artificial intelligence projects",
+    "assignedAssistant": "assist-004"
+  },
+  {
+    "id": "lab-005",
+    "labNo": "301",
+    "name": "Web Development Lab",
+    "collegeId": "col-003",
+    "capacity": 28,
+    "description": "Lab focused on web development and frontend technologies",
+    "assignedAssistant": "assist-005"
+  }
+]

@@ -1,0 +1,100 @@
+[
+  {
+    "id": "soft-001",
+    "name": "Visual Studio Code",
+    "version": "1.76.0",
+    "category": "IDE",
+    "installDate": "2023-01-15"
+  },
+  {
+    "id": "soft-002",
+    "name": "Python",
+    "version": "3.11.0",
+    "category": "Programming Language",
+    "installDate": "2023-01-10"
+  },
+  {
+    "id": "soft-003",
+    "name": "Git",
+    "version": "2.40.0",
+    "category": "Version Control",
+    "installDate": "2023-01-05"
+  },
+  {
+    "id": "soft-004",
+    "name": "JetBrains IntelliJ IDEA",
+    "version": "2023.1.1",
+    "category": "IDE",
+    "installDate": "2023-02-01"
+  },
+  {
+    "id": "soft-005",
+    "name": "Docker Desktop",
+    "version": "4.17.0",
+    "category": "Containerization",
+    "installDate": "2023-02-10"
+  },
+  {
+    "id": "soft-006",
+    "name": "MySQL Server",
+    "version": "8.0.32",
+    "category": "Database",
+    "installDate": "2023-01-20"
+  },
+  {
+    "id": "soft-007",
+    "name": "PostgreSQL",
+    "version": "15.1",
+    "category": "Database",
+    "installDate": "2023-02-15"
+  },
+  {
+    "id": "soft-008",
+    "name": "Node.js",
+    "version": "18.14.0",
+    "category": "Runtime",
+    "installDate": "2023-01-25"
+  },
+  {
+    "id": "soft-009",
+    "name": "Apache Tomcat",
+    "version": "10.1.5",
+    "category": "Web Server",
+    "installDate": "2023-02-05"
+  },
+  {
+    "id": "soft-010",
+    "name": "MongoDB",
+    "version": "5.0.13",
+    "category": "Database",
+    "installDate": "2023-02-20"
+  },
+  {
+    "id": "soft-011",
+    "name": "TensorFlow",
+    "version": "2.11.0",
+    "category": "ML/AI Framework",
+    "installDate": "2023-03-01"
+  },
+  {
+    "id": "soft-012",
+    "name": "Jupyter Notebook",
+    "version": "7.0.0",
+    "category": "Development Tool",
+    "installDate": "2023-03-05"
+  },
+  {
+    "id": "soft-013",
+    "name": "Xcode",
+    "version": "14.2",
+    "category": "IDE",
+    "installDate": "2023-03-10"
+  },
+  {
+    "id": "soft-014",
+    "name": "Figma",
+    "version": "119.0",
+    "category": "Design Tool",
+    "installDate": "2023-03-12"
+  }
+]

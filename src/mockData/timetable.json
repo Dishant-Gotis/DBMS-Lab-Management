@@ -1,0 +1,82 @@
+[
+  {
+    "id": "tt-001",
+    "labId": "lab-001",
+    "classId": "class-001",
+    "courseId": "course-001",
+    "facultyId": "faculty-001",
+    "dayOfWeek": "Mon",
+    "startTime": "09:00",
+    "endTime": "10:30"
+  },
+  {
+    "id": "tt-002",
+    "labId": "lab-001",
+    "classId": "class-001",
+    "courseId": "course-001",
+    "facultyId": "faculty-001",
+    "dayOfWeek": "Wed",
+    "startTime": "09:00",
+    "endTime": "10:30"
+  },
+  {
+    "id": "tt-003",
+    "labId": "lab-001",
+    "classId": "class-001",
+    "courseId": "course-001",
+    "facultyId": "faculty-001",
+    "dayOfWeek": "Fri",
+    "startTime": "09:00",
+    "endTime": "10:30"
+  },
+  {
+    "id": "tt-004",
+    "labId": "lab-002",
+    "classId": "class-002",
+    "courseId": "course-001",
+    "facultyId": "faculty-001",
+    "dayOfWeek": "Mon",
+    "startTime": "11:00",
+    "endTime": "12:30"
+  },
+  {
+    "id": "tt-005",
+    "labId": "lab-003",
+    "classId": "class-004",
+    "courseId": "course-003",
+    "facultyId": "faculty-002",
+    "dayOfWeek": "Tue",
+    "startTime": "14:00",
+    "endTime": "15:30"
+  },
+  {
+    "id": "tt-006",
+    "labId": "lab-003",
+    "classId": "class-004",
+    "courseId": "course-003",
+    "facultyId": "faculty-002",
+    "dayOfWeek": "Thu",
+    "startTime": "14:00",
+    "endTime": "15:30"
+  },
+  {
+    "id": "tt-007",
+    "labId": "lab-004",
+    "classId": "class-005",
+    "courseId": "course-004",
+    "facultyId": "faculty-003",
+    "dayOfWeek": "Mon",
+    "startTime": "15:00",
+    "endTime": "16:30"
+  },
+  {
+    "id": "tt-008",
+    "labId": "lab-004",
+    "classId": "class-005",
+    "courseId": "course-004",
+    "facultyId": "faculty-003",
+    "dayOfWeek": "Wed",
+    "startTime": "15:00",
+    "endTime": "16:30"
+  }
+]

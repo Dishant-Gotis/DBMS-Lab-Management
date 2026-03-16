@@ -1,0 +1,37 @@
+[
+  {
+    "id": "class-001",
+    "name": "CS-A",
+    "courseId": "course-001",
+    "semester": 3,
+    "strength": 45
+  },
+  {
+    "id": "class-002",
+    "name": "CS-B",
+    "courseId": "course-001",
+    "semester": 3,
+    "strength": 42
+  },
+  {
+    "id": "class-003",
+    "name": "IT-A",
+    "courseId": "course-002",
+    "semester": 4,
+    "strength": 40
+  },
+  {
+    "id": "class-004",
+    "name": "IT-B",
+    "courseId": "course-003",
+    "semester": 3,
+    "strength": 38
+  },
+  {
+    "id": "class-005",
+    "name": "CS-C",
+    "courseId": "course-004",
+    "semester": 7,
+    "strength": 35
+  }
+]

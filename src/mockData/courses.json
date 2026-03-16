@@ -1,0 +1,50 @@
+[
+  {
+    "id": "course-001",
+    "name": "Data Structures",
+    "code": "CS-201",
+    "credits": 4
+  },
+  {
+    "id": "course-002",
+    "name": "Web Development",
+    "code": "CS-301",
+    "credits": 4
+  },
+  {
+    "id": "course-003",
+    "name": "Database Management Systems",
+    "code": "CS-202",
+    "credits": 4
+  },
+  {
+    "id": "course-004",
+    "name": "Artificial Intelligence",
+    "code": "CS-401",
+    "credits": 3
+  },
+  {
+    "id": "course-005",
+    "name": "Cloud Computing",
+    "code": "CS-302",
+    "credits": 3
+  },
+  {
+    "id": "course-006",
+    "name": "Java Programming",
+    "code": "CS-101",
+    "credits": 4
+  },
+  {
+    "id": "course-007",
+    "name": "Operating Systems",
+    "code": "CS-303",
+    "credits": 4
+  },
+  {
+    "id": "course-008",
+    "name": "Cybersecurity",
+    "code": "CS-402",
+    "credits": 3
+  }
+]

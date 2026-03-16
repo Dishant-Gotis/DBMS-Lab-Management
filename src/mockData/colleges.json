@@ -1,0 +1,17 @@
+[
+  {
+    "id": "col-001",
+    "name": "Institute of Technology",
+    "city": "Mumbai"
+  },
+  {
+    "id": "col-002",
+    "name": "College of Engineering",
+    "city": "Bangalore"
+  },
+  {
+    "id": "col-003",
+    "name": "Science & Technology College",
+    "city": "Delhi"
+  }
+]

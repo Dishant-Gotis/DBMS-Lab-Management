@@ -1,0 +1,42 @@
+[
+  {
+    "id": "faculty-001",
+    "name": "Dr. Rajesh Kumar",
+    "email": "rajesh.kumar@college.edu",
+    "phone": "+91-9876543210",
+    "department": "Computer Science",
+    "courses": ["course-001", "course-002"]
+  },
+  {
+    "id": "faculty-002",
+    "name": "Prof. Priya Sharma",
+    "email": "priya.sharma@college.edu",
+    "phone": "+91-9876543211",
+    "department": "Information Technology",
+    "courses": ["course-003", "course-004"]
+  },
+  {
+    "id": "faculty-003",
+    "name": "Dr. Arun Singh",
+    "email": "arun.singh@college.edu",
+    "phone": "+91-9876543212",
+    "department": "Computer Science",
+    "courses": ["course-005"]
+  },
+  {
+    "id": "faculty-004",
+    "name": "Prof. Meera Patel",
+    "email": "meera.patel@college.edu",
+    "phone": "+91-9876543213",
+    "department": "Information Technology",
+    "courses": ["course-006", "course-007"]
+  },
+  {
+    "id": "faculty-005",
+    "name": "Dr. Vikram Desai",
+    "email": "vikram.desai@college.edu",
+    "phone": "+91-9876543214",
+    "department": "Computer Science",
+    "courses": ["course-008"]
+  }
+]

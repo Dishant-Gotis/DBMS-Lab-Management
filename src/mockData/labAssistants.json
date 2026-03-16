@@ -1,0 +1,37 @@
+[
+  {
+    "id": "assist-001",
+    "name": "Rahul Verma",
+    "email": "rahul.verma@college.edu",
+    "phone": "+91-8765432100",
+    "assignedLab": "lab-001"
+  },
+  {
+    "id": "assist-002",
+    "name": "Ananya Gupta",
+    "email": "ananya.gupta@college.edu",
+    "phone": "+91-8765432101",
+    "assignedLab": "lab-002"
+  },
+  {
+    "id": "assist-003",
+    "name": "Arjun Malhotra",
+    "email": "arjun.malhotra@college.edu",
+    "phone": "+91-8765432102",
+    "assignedLab": "lab-003"
+  },
+  {
+    "id": "assist-004",
+    "name": "Neha Chawla",
+    "email": "neha.chawla@college.edu",
+    "phone": "+91-8765432103",
+    "assignedLab": "lab-004"
+  },
+  {
+    "id": "assist-005",
+    "name": "Siddharth Iyer",
+    "email": "siddharth.iyer@college.edu",
+    "phone": "+91-8765432104",
+    "assignedLab": "lab-005"
+  }
+]
