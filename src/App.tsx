@@ -2,7 +2,6 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AppProvider } from './context/AppContext';
 import { MainLayout } from './components/layout/MainLayout';
-import Dashboard from './components/pages/Dashboard/Dashboard';
 import LabsPage from './components/pages/Labs/LabsPage';
 import TimetablePage from './components/pages/Timetable/TimetablePage';
 import ClassesPage from './components/pages/Classes/ClassesPage';
@@ -48,7 +47,7 @@ const AppShell: React.FC = () => {
       <Routes>
         {role === 'admin' && <Route path="/" element={<AdminDashboard />} />}
         {role === 'admin' && <Route path="/admin" element={<AdminDashboard />} />}
-        {role !== 'admin' && <Route path="/" element={<Dashboard />} />}
+        {role !== 'admin' && <Route path="/" element={<Navigate to="/labs" replace />} />}
         <Route path="/labs"      element={<LabsPage />} />
         <Route path="/timetable" element={<TimetablePage />} />
         <Route path="/classes"   element={<ClassesPage />} />

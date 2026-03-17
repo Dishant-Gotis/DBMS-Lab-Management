@@ -7,188 +7,11 @@ import { useAuth } from '../../../context/AuthContext';
 import { type DemoLab, type DemoPC, getAllLabs, buildDemoPCs } from '../../../utils/labData';
 import { mockData } from '../../../mockData';
 import { FiPlus, FiEdit2, FiPackage } from 'react-icons/fi';
+import LabEditor from './LabEditor';
+import SoftwareManager from './SoftwareManager';
 
 type SoftwareEntry = { id: string; name: string; version: string; category: string };
-
 const ALL_SOFTWARE: SoftwareEntry[] = mockData.software as SoftwareEntry[];
-
-// ─── Lab Editor Modal ────────────────────────────────────────────────────────
-interface LabEditorProps {
-  mode: 'add' | 'edit';
-  initial: Partial<DemoLab>;
-  onSave: (data: Omit<DemoLab, 'id'>) => void;
-  onClose: () => void;
-}
-const LabEditor: React.FC<LabEditorProps> = ({ mode, initial, onSave, onClose }) => {
-  const [form, setForm] = useState({
-    labNo:       initial.labNo      ?? '',
-    name:        initial.name       ?? '',
-    capacity:    initial.capacity   ?? 30,
-    description: initial.description ?? '',
-  });
-
-  const valid = form.labNo.trim() && form.name.trim();
-
-  return (
-    <Modal
-      isOpen
-      onClose={onClose}
-      title={mode === 'add' ? 'Add New Lab' : 'Edit Lab'}
-      size="md"
-      footer={
-        <div className="flex justify-end gap-2 w-full">
-          <Button label="Cancel" variant="secondary" onClick={onClose} />
-          <Button label={mode === 'add' ? 'Add Lab' : 'Save'} disabled={!valid} onClick={() => onSave(form)} />
-        </div>
-      }
-    >
-      <div className="space-y-3">
-        <label className="block text-sm text-slate-600">
-          Lab Number *
-          <input
-            className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400"
-            value={form.labNo}
-            onChange={e => setForm(f => ({ ...f, labNo: e.target.value }))}
-            placeholder="e.g. 6113"
-            disabled={mode === 'edit'}
-          />
-        </label>
-        <label className="block text-sm text-slate-600">
-          Lab Name *
-          <input
-            className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400"
-            value={form.name}
-            onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-            placeholder="e.g. Computer Lab 6113"
-          />
-        </label>
-        <label className="block text-sm text-slate-600">
-          Capacity (seats)
-          <input
-            type="number"
-            className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400"
-            value={form.capacity}
-            onChange={e => setForm(f => ({ ...f, capacity: Number(e.target.value) }))}
-          />
-        </label>
-        <label className="block text-sm text-slate-600">
-          Description
-          <textarea
-            className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400 resize-none"
-            rows={2}
-            value={form.description}
-            onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-            placeholder="Short description of the lab"
-          />
-        </label>
-      </div>
-    </Modal>
-  );
-};
-
-// ─── PC Software Manager Modal ───────────────────────────────────────────────
-interface SoftwareManagerProps {
-  pc: DemoPC;
-  installedIds: string[];
-  onSave: (ids: string[]) => void;
-  onClose: () => void;
-}
-const SoftwareManager: React.FC<SoftwareManagerProps> = ({ pc, installedIds, onSave, onClose }) => {
-  const [selected, setSelected] = useState<Set<string>>(new Set(installedIds));
-  const [customSoftware, setCustomSoftware] = useState<SoftwareEntry[]>([]);
-  const [newSoftwareForm, setNewSoftwareForm] = useState({ name: '', version: '', category: '' });
-
-  const allAvailableSoftware = useMemo(() => [...ALL_SOFTWARE, ...customSoftware], [customSoftware]);
-
-  const toggle = (id: string) => {
-    setSelected(prev => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  };
-
-  const handleAddSoftware = () => {
-    if (newSoftwareForm.name.trim() && newSoftwareForm.version.trim() && newSoftwareForm.category.trim()) {
-      const newEntry: SoftwareEntry = {
-        id: `custom-${Date.now()}`,
-        name: newSoftwareForm.name.trim(),
-        version: newSoftwareForm.version.trim(),
-        category: newSoftwareForm.category.trim(),
-      };
-      setCustomSoftware(prev => [...prev, newEntry]);
-      setSelected(prev => new Set(prev).add(newEntry.id));
-      setNewSoftwareForm({ name: '', version: '', category: '' });
-    }
-  };
-
-  const newSoftwareValid = newSoftwareForm.name.trim() && newSoftwareForm.version.trim() && newSoftwareForm.category.trim();
-
-  return (
-    <Modal
-      isOpen
-      onClose={onClose}
-      title={`Software — ${pc.pcNo}`}
-      size="md"
-      footer={
-        <div className="w-full space-y-3">
-          <div className="border-t border-slate-200 pt-3">
-            <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">Add New Software</p>
-            <div className="grid grid-cols-3 gap-2 mb-2">
-              <input
-                className="col-span-3 border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400"
-                placeholder="Software name *"
-                value={newSoftwareForm.name}
-                onChange={e => setNewSoftwareForm(f => ({ ...f, name: e.target.value }))}
-              />
-              <input
-                className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400"
-                placeholder="Version"
-                value={newSoftwareForm.version}
-                onChange={e => setNewSoftwareForm(f => ({ ...f, version: e.target.value }))}
-              />
-              <input
-                className="col-span-2 border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400"
-                placeholder="Category (e.g. IDE)"
-                value={newSoftwareForm.category}
-                onChange={e => setNewSoftwareForm(f => ({ ...f, category: e.target.value }))}
-              />
-            </div>
-            <Button label="+ Add to List" size="sm" disabled={!newSoftwareValid} onClick={handleAddSoftware} />
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button label="Cancel" variant="secondary" onClick={onClose} />
-            <Button label="Save Changes" onClick={() => onSave([...selected])} />
-          </div>
-        </div>
-      }
-    >
-      <p className="text-xs text-slate-500 mb-3">Check software to mark as installed on this PC.</p>
-      <div className="space-y-1.5">
-        {allAvailableSoftware.map(sw => (
-          <label
-            key={sw.id}
-            className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${
-              selected.has(sw.id) ? 'bg-sky-50 border border-sky-200' : 'hover:bg-slate-50 border border-transparent'
-            }`}
-          >
-            <input
-              type="checkbox"
-              className="accent-sky-500"
-              checked={selected.has(sw.id)}
-              onChange={() => toggle(sw.id)}
-            />
-            <div className="flex-1 min-w-0">
-              <span className="text-sm font-medium text-slate-800">{sw.name}</span>
-              <span className="ml-2 font-mono text-xs text-slate-400">{sw.version}</span>
-            </div>
-            <span className="text-[11px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">{sw.category}</span>
-          </label>
-        ))}
-      </div>
-    </Modal>
-  );
-};
 
 // ─── Main Page ───────────────────────────────────────────────────────────────
 const LabsPage: React.FC = () => {
@@ -220,9 +43,10 @@ const LabsPage: React.FC = () => {
 
   const baseLabs = useMemo<DemoLab[]>(() => getAllLabs(), []);
 
-  const allLabs = useMemo<DemoLab[]>(() => {
-    return [...baseLabs, ...extraLabs].map(l => ({ ...l, ...(labEdits[l.labNo] ?? {}) }));
-  }, [baseLabs, extraLabs, labEdits]);
+  const allLabs = useMemo<DemoLab[]>(
+    () => [...baseLabs, ...extraLabs].map(l => ({ ...l, ...(labEdits[l.labNo] ?? {}) })),
+    [baseLabs, extraLabs, labEdits]
+  );
 
   // Faculty AND labAssistant see only their assigned labs; admin sees all
   const accessibleLabs = useMemo<DemoLab[]>(() => {
@@ -250,14 +74,17 @@ const LabsPage: React.FC = () => {
     return map;
   });
 
-  const selectedLabPCs = useMemo(() => (selectedLab ? labPCMap[selectedLab.labNo] ?? [] : []), [selectedLab, labPCMap]);
+  const selectedLabPCs = useMemo(
+    () => (selectedLab ? labPCMap[selectedLab.labNo] ?? [] : []),
+    [selectedLab, labPCMap]
+  );
 
-  const canAddLabs     = role === 'faculty' || role === 'admin';
-  const canEditLabs    = role === 'faculty' || role === 'admin';
-  const canAddPCs      = role === 'faculty' || role === 'admin';
-  const canEditPCs     = role === 'faculty' || role === 'labAssistant' || role === 'admin';
+  const canAddLabs      = role === 'faculty' || role === 'admin';
+  const canEditLabs     = role === 'faculty' || role === 'admin';
+  const canAddPCs       = role === 'faculty' || role === 'admin';
+  const canEditPCs      = role === 'faculty' || role === 'labAssistant' || role === 'admin';
   const canEditSoftware = role === 'faculty' || role === 'labAssistant' || role === 'admin';
-  const canAccessLabs  = role !== 'student';
+  const canAccessLabs   = role !== 'student';
 
   if (!canAccessLabs) {
     return (
@@ -271,14 +98,13 @@ const LabsPage: React.FC = () => {
     );
   }
 
-  // ── Lab editor handlers ─────────────────────────────────────────────────
-  const openAddLab  = () => { setLabEditorMode('add'); setEditingLab(null); setLabEditorOpen(true); };
+  // ── Lab editor handlers ──────────────────────────────────────────────────
+  const openAddLab  = () => { setLabEditorMode('add');  setEditingLab(null); setLabEditorOpen(true); };
   const openEditLab = (lab: DemoLab) => { setLabEditorMode('edit'); setEditingLab(lab); setLabEditorOpen(true); };
 
   const handleSaveLab = (data: Omit<DemoLab, 'id'>) => {
     if (labEditorMode === 'add') {
-      const newLab: DemoLab = { id: `lab-${data.labNo}`, ...data };
-      setExtraLabs(prev => [...prev, newLab]);
+      setExtraLabs(prev => [...prev, { id: `lab-${data.labNo}`, ...data }]);
       setLabPCMap(prev => ({ ...prev, [data.labNo]: buildDemoPCs(data.labNo) }));
     } else if (editingLab) {
       setLabEdits(prev => ({ ...prev, [editingLab.labNo]: data }));
@@ -286,17 +112,23 @@ const LabsPage: React.FC = () => {
     setLabEditorOpen(false);
   };
 
-  // ── PC editor handlers ──────────────────────────────────────────────────
+  // ── PC editor handlers ───────────────────────────────────────────────────
   const openAddPc = () => {
     if (!selectedLab) return;
     const nextIdx = (labPCMap[selectedLab.labNo]?.length ?? 0) + 1;
-    setPcEditorMode('add'); setEditingPcId(null);
-    setPcForm({ pcNo: `${selectedLab.labNo}-PC-${String(nextIdx).padStart(2, '0')}`, os: 'Windows 11 Pro', processor: 'Intel Core i5-12400', ram: '16GB DDR4', storage: '512GB SSD', gpu: 'Intel UHD 730', status: 'active' });
+    setPcEditorMode('add');
+    setEditingPcId(null);
+    setPcForm({
+      pcNo: `${selectedLab.labNo}-PC-${String(nextIdx).padStart(2, '0')}`,
+      os: 'Windows 11 Pro', processor: 'Intel Core i5-12400',
+      ram: '16GB DDR4', storage: '512GB SSD', gpu: 'Intel UHD 730', status: 'active',
+    });
     setPcEditorOpen(true);
   };
 
   const openEditPc = (pc: DemoPC) => {
-    setPcEditorMode('edit'); setEditingPcId(pc.id);
+    setPcEditorMode('edit');
+    setEditingPcId(pc.id);
     setPcForm({ pcNo: pc.pcNo, os: pc.os, processor: pc.processor, ram: pc.ram, storage: pc.storage, gpu: pc.gpu, status: pc.status });
     setPcEditorOpen(true);
   };
@@ -313,7 +145,7 @@ const LabsPage: React.FC = () => {
     setPcEditorOpen(false);
   };
 
-  // ── Software handlers ──────────────────────────────────────────────────
+  // ── Software handlers ────────────────────────────────────────────────────
   const handleSaveSoftware = (ids: string[]) => {
     if (!softwarePc) return;
     setPcSoftwareMap(prev => ({ ...prev, [softwarePc.id]: ids }));
@@ -428,7 +260,6 @@ const LabsPage: React.FC = () => {
       >
         {selectedLab && (
           <div className="space-y-4">
-            {/* Lab meta */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {[
                 { label: 'Lab ID',    value: selectedLab.labNo },
@@ -443,7 +274,6 @@ const LabsPage: React.FC = () => {
               ))}
             </div>
 
-            {/* PC cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {selectedLabPCs.map(pc => {
                 const installedCount = getPcInstalledIds(pc.id).length;
@@ -460,22 +290,22 @@ const LabsPage: React.FC = () => {
                       </span>
                     </div>
                     <div className="space-y-0.5 text-xs text-slate-600 mb-3">
-                      <p><span className="text-slate-400">OS:</span> <span className="font-medium text-slate-800">{pc.os}</span></p>
-                      <p><span className="text-slate-400">CPU:</span> <span className="font-medium text-slate-800">{pc.processor}</span></p>
-                      <p><span className="text-slate-400">RAM:</span> <span className="font-medium text-slate-800">{pc.ram}</span></p>
+                      <p><span className="text-slate-400">OS:</span>      <span className="font-medium text-slate-800">{pc.os}</span></p>
+                      <p><span className="text-slate-400">CPU:</span>     <span className="font-medium text-slate-800">{pc.processor}</span></p>
+                      <p><span className="text-slate-400">RAM:</span>     <span className="font-medium text-slate-800">{pc.ram}</span></p>
                       <p><span className="text-slate-400">Storage:</span> <span className="font-medium text-slate-800">{pc.storage}</span></p>
-                      <p><span className="text-slate-400">GPU:</span> <span className="font-medium text-slate-800">{pc.gpu}</span></p>
+                      <p><span className="text-slate-400">GPU:</span>     <span className="font-medium text-slate-800">{pc.gpu}</span></p>
                     </div>
                     <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
                       {canEditPCs && (
-                        <Button label="Edit Specs" variant="secondary" size="sm" icon={<FiEdit2 size={11}/>} onClick={() => openEditPc(pc)} />
+                        <Button label="Edit Specs" variant="secondary" size="sm" icon={<FiEdit2 size={11} />} onClick={() => openEditPc(pc)} />
                       )}
                       {canEditSoftware && (
                         <Button
                           label={`Software (${installedCount})`}
                           variant="secondary"
                           size="sm"
-                          icon={<FiPackage size={11}/>}
+                          icon={<FiPackage size={11} />}
                           onClick={() => setSoftwarePc(pc)}
                         />
                       )}
@@ -488,7 +318,7 @@ const LabsPage: React.FC = () => {
         )}
       </Modal>
 
-      {/* ── PC Editor Modal (hardware specs) ── */}
+      {/* ── PC Editor Modal ── */}
       <Modal
         isOpen={pcEditorOpen}
         onClose={() => setPcEditorOpen(false)}
@@ -505,11 +335,11 @@ const LabsPage: React.FC = () => {
           {(['pcNo', 'os', 'processor', 'ram', 'storage', 'gpu'] as const).map(field => {
             const meta: Record<string, { label: string; span: boolean }> = {
               pcNo:      { label: 'PC Number',        span: false },
-              os:        { label: 'Operating System', span: true },
-              processor: { label: 'Processor',        span: true },
+              os:        { label: 'Operating System', span: true  },
+              processor: { label: 'Processor',        span: true  },
               ram:       { label: 'RAM',              span: false },
               storage:   { label: 'Storage',          span: false },
-              gpu:       { label: 'GPU',              span: true },
+              gpu:       { label: 'GPU',              span: true  },
             };
             const { label, span } = meta[field];
             return (

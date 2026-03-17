@@ -4,12 +4,11 @@ import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import {
   FiChevronLeft, FiChevronRight,
-  FiLayout, FiBox, FiClock, FiBookOpen,
+  FiBox, FiClock, FiBookOpen,
   FiUsers, FiSettings, FiShield,
 } from 'react-icons/fi';
 
 const iconMap: Record<string, React.ReactNode> = {
-  dashboard: <FiLayout size={15} />,
   admin:     <FiShield size={15} />,
   labs:      <FiBox size={15} />,
   timetable: <FiClock size={15} />,
@@ -20,21 +19,19 @@ const iconMap: Record<string, React.ReactNode> = {
 
 type NavItem = { id: string; label: string; path: string };
 
-// Role-specific nav (PCs and Software are removed everywhere)
+// Dashboard removed — faculty/assistant land directly on Labs
 const NAV_BY_ROLE: Record<string, NavItem[]> = {
   admin: [
     { id: 'admin',    label: 'Admin Dashboard', path: '/admin' },
     { id: 'settings', label: 'Settings',        path: '/settings' },
   ],
   faculty: [
-    { id: 'dashboard', label: 'Dashboard', path: '/' },
     { id: 'labs',      label: 'Labs',      path: '/labs' },
     { id: 'timetable', label: 'Timetable', path: '/timetable' },
     { id: 'classes',   label: 'Classes',   path: '/classes' },
     { id: 'settings',  label: 'Settings',  path: '/settings' },
   ],
   labAssistant: [
-    { id: 'dashboard', label: 'Dashboard', path: '/' },
     { id: 'labs',      label: 'Labs',      path: '/labs' },
     { id: 'timetable', label: 'Timetable', path: '/timetable' },
     { id: 'settings',  label: 'Settings',  path: '/settings' },
@@ -78,7 +75,7 @@ export const Sidebar: React.FC = () => {
           <NavLink
             key={item.id}
             to={item.path}
-            end={item.path === '/' || item.path === '/admin'}
+            end={item.path === '/admin'}
             title={!sidebarOpen ? item.label : undefined}
             className={({ isActive }) =>
               `flex items-center rounded-md py-2 text-sm transition-all duration-150 ${
