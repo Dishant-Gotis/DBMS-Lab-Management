@@ -15,11 +15,11 @@ export const Modal: React.FC<ModalProps> = ({
   const sizeClasses: Record<string, string> = {
     sm: 'w-96',
     md: 'w-2xl',
-    lg: 'w-4xl',
+    lg: 'w-[92vw] max-w-6xl',
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-100/70 backdrop-blur-[1px]">
       <div className={`bg-white rounded-lg shadow-xl ${sizeClasses[size]}`}>
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">

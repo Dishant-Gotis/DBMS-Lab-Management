@@ -24,12 +24,12 @@ export const usePCs = () => {
   const [pcs] = useState<PC[]>(mockData.pcs as PC[]);
 
   const getPCs = useCallback(() => {
-    // Lab assistants only see their assigned lab's PCs
-    if (role === 'labAssistant' && user.assignedLab) {
-      return pcs.filter(pc => pc.labId === user.assignedLab);
+    // Lab assistants only see their assigned labs' PCs
+    if (role === 'labAssistant' && user.assignedLabs && user.assignedLabs.length > 0) {
+      return pcs.filter(pc => user.assignedLabs!.includes(pc.labId));
     }
     return pcs;
-  }, [pcs, role, user.assignedLab]);
+  }, [pcs, role, user.assignedLabs]);
 
   const canEditPCs = hasPermission(role, 'pcs', 'update');
 
@@ -50,12 +50,12 @@ export const useTimetable = () => {
   const [timetable] = useState<TimetableEntry[]>(mockData.timetable as TimetableEntry[]);
 
   const getTimetable = useCallback(() => {
-    // Lab assistants only see their lab's schedule
-    if (role === 'labAssistant' && user.assignedLab) {
-      return timetable.filter(entry => entry.labId === user.assignedLab);
+    // Lab assistants only see their assigned labs' schedule
+    if (role === 'labAssistant' && user.assignedLabs && user.assignedLabs.length > 0) {
+      return timetable.filter(entry => user.assignedLabs!.includes(entry.labId));
     }
     return timetable;
-  }, [timetable, role, user.assignedLab]);
+  }, [timetable, role, user.assignedLabs]);
 
   const canEditTimetable = hasPermission(role, 'timetable', 'update');
 

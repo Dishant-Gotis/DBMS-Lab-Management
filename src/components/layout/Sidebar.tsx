@@ -1,11 +1,12 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { NavLink } from 'react-router-dom';
 import { NAV_ITEMS } from '../../utils/constants';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
 import {
   FiChevronLeft, FiChevronRight,
   FiLayout, FiBox, FiMonitor, FiPackage,
-  FiClock, FiBookOpen, FiUsers, FiSettings,
+  FiClock, FiBookOpen, FiUsers, FiSettings, FiShield,
 } from 'react-icons/fi';
 
 const iconMap: Record<string, React.ReactNode> = {
@@ -17,10 +18,39 @@ const iconMap: Record<string, React.ReactNode> = {
   classes: <FiBookOpen size={15} />,
   faculty: <FiUsers size={15} />,
   settings: <FiSettings size={15} />,
+  admin: <FiShield size={15} />,
 };
 
 export const Sidebar: React.FC = () => {
   const { sidebarOpen, toggleSidebar } = useApp();
+  const { role } = useAuth();
+
+  // Filter navigation items based on role
+  const visibleNavItems = useMemo(() => {
+    let items = [...NAV_ITEMS];
+    
+    // Students can only see dashboard and settings
+    if (role === 'student') {
+      items = items.filter(item => item.id === 'dashboard' || item.id === 'settings');
+    }
+    
+    // Lab assistants cannot see classes, faculty, or admin
+    if (role === 'labAssistant') {
+      items = items.filter(item => !['classes', 'faculty'].includes(item.id));
+    }
+    
+    return items;
+  }, [role]);
+
+  // Add admin dashboard link for admin users
+  const finalNavItems = useMemo(() => {
+    if (role === 'admin') {
+      return [
+        { id: 'admin', label: 'Admin Dashboard', icon: 'admin', path: '/admin' },
+      ];
+    }
+    return visibleNavItems;
+  }, [role, visibleNavItems]);
 
   return (
     <div
@@ -34,11 +64,15 @@ export const Sidebar: React.FC = () => {
           sidebarOpen ? 'px-4 gap-2.5' : 'justify-center'
         }`}
       >
-        <div className="w-7 h-7 bg-sky-500 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm">
-          <FiBox size={13} className="text-white" />
+        <div className={`w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm ${
+          role === 'admin' ? 'bg-red-500' : 'bg-sky-500'
+        }`}>
+          {role === 'admin' ? <FiShield size={13} className="text-white" /> : <FiBox size={13} className="text-white" />}
         </div>
         {sidebarOpen && (
-          <span className="text-slate-900 font-semibold text-sm tracking-tight">ClubERP</span>
+          <span className="text-slate-900 font-semibold text-sm tracking-tight">
+            {role === 'admin' ? 'Admin Panel' : 'Lab Manager'}
+          </span>
         )}
       </div>
 
@@ -46,10 +80,10 @@ export const Sidebar: React.FC = () => {
       <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
         {sidebarOpen && (
           <p className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-            Main
+            {role === 'admin' ? 'Administration' : 'Main'}
           </p>
         )}
-        {NAV_ITEMS.map(item => (
+        {finalNavItems.map(item => (
           <NavLink
             key={item.id}
             to={item.path}

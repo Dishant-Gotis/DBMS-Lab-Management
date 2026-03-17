@@ -7,13 +7,32 @@ export interface User {
   name: string;
   email: string;
   role: UserRole;
-  assignedLab?: string;
+  assignedLabs?: string[]; // For lab assistants: array of lab IDs they manage
 }
 
 export interface AuthContextType {
   user: User;
   role: UserRole;
-  switchRole: (newRole: UserRole) => void;
+  isAuthenticated: boolean;
+  login: (email: string, role: Exclude<UserRole, 'admin'> | 'admin') => void;
+  loginAsAdmin: (email: string) => void;
+  logout: () => void;
+}
+
+// Lab and Assistant Management Types
+export interface LabAssignment {
+  labNo: string;
+  assistantId: string;
+  assistantName: string;
+  assignedDate: string;
+}
+
+export interface LabAssistantRecord {
+  id: string;
+  name: string;
+  email: string;
+  assignedLabs: string[]; // Lab IDs assigned to this assistant
+  createdDate: string;
 }
 
 export interface Permission {
