@@ -2,20 +2,30 @@ import React, { useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { FiChevronDown, FiUser, FiLogOut } from 'react-icons/fi';
-import { NAV_ITEMS } from '../../utils/constants';
+
+// Inline path → label map (replaces the old NAV_ITEMS import)
+const PAGE_TITLE: Record<string, string> = {
+  '/':          'Dashboard',
+  '/admin':     'Admin Dashboard',
+  '/labs':      'Labs',
+  '/timetable': 'Timetable',
+  '/classes':   'Classes',
+  '/faculty':   'Faculty',
+  '/settings':  'Settings',
+};
 
 export const TopBar: React.FC = () => {
   const { user, role, logout } = useAuth();
   const location = useLocation();
   const [showUserMenu, setShowUserMenu] = useState(false);
 
-  const currentPage = NAV_ITEMS.find(item => item.path === location.pathname)?.label ?? 'Dashboard';
+  const currentPage = PAGE_TITLE[location.pathname] ?? 'Lab Manager';
 
   const roleStyle: Record<string, string> = {
-    student: 'bg-sky-50 text-sky-700 border-sky-200',
+    student:      'bg-sky-50 text-sky-700 border-sky-200',
     labAssistant: 'bg-amber-50 text-amber-700 border-amber-200',
-    faculty: 'bg-violet-50 text-violet-700 border-violet-200',
-    admin: 'bg-red-50 text-red-700 border-red-200',
+    faculty:      'bg-violet-50 text-violet-700 border-violet-200',
+    admin:        'bg-red-50 text-red-700 border-red-200',
   };
 
   const handleLogout = () => {

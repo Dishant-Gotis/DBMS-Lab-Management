@@ -1,325 +1,180 @@
-﻿"use client";
+import React, { useState } from 'react';
+import { FiShield, FiUsers, FiTool, FiMonitor, FiArrowLeft, FiEye, FiEyeOff } from 'react-icons/fi';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Eye, EyeOff, Mail, Sparkles } from 'lucide-react';
-import { cn } from '@/lib/utils';
-
-type StaffRole = 'labAssistant' | 'faculty';
-type UserRole = 'student' | StaffRole | 'admin';
+type UserRole = 'student' | 'labAssistant' | 'faculty' | 'admin';
 
 interface LoginPageProps {
-  onLoginSuccess: (payload: { email: string; role: UserRole }) => void;
+  onLoginSuccess: (email: string, password: string, role: UserRole) => { success: boolean; error?: string };
+  onStudentAccess: () => void;
 }
 
-interface PupilProps {
-  size?: number;
-  maxDistance?: number;
-  pupilColor?: string;
-}
+const ROLES: { role: Exclude<UserRole, 'student'>; label: string; sub: string; icon: React.ReactNode; accent: string; iconBg: string; border: string }[] = [
+  { role: 'admin',        label: 'College / Admin', sub: 'Full system access',      icon: <FiShield size={20} />,  accent: 'text-red-700',    iconBg: 'bg-red-50',    border: 'border-red-200 hover:border-red-400 hover:bg-red-50/60' },
+  { role: 'faculty',      label: 'Faculty',         sub: 'View & manage your labs', icon: <FiUsers size={20} />,   accent: 'text-violet-700', iconBg: 'bg-violet-50', border: 'border-violet-200 hover:border-violet-400 hover:bg-violet-50/60' },
+  { role: 'labAssistant', label: 'Lab Assistant',   sub: 'Manage assigned labs',    icon: <FiTool size={20} />,    accent: 'text-amber-700',  iconBg: 'bg-amber-50',  border: 'border-amber-200 hover:border-amber-400 hover:bg-amber-50/60' },
+];
 
-const Pupil = ({ size = 12, maxDistance = 5, pupilColor = '#1e293b' }: PupilProps) => {
-  const [mouseX, setMouseX] = useState(0);
-  const [mouseY, setMouseY] = useState(0);
-  const pupilRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      setMouseX(e.clientX);
-      setMouseY(e.clientY);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
-  }, []);
-
-  const position = useMemo(() => {
-    if (!pupilRef.current) return { x: 0, y: 0 };
-    const rect = pupilRef.current.getBoundingClientRect();
-    const centerX = rect.left + rect.width / 2;
-    const centerY = rect.top + rect.height / 2;
-    const dx = mouseX - centerX;
-    const dy = mouseY - centerY;
-    const angle = Math.atan2(dy, dx);
-    const distance = Math.min(Math.hypot(dx, dy), maxDistance);
-
-    return {
-      x: Math.cos(angle) * distance,
-      y: Math.sin(angle) * distance,
-    };
-  }, [maxDistance, mouseX, mouseY]);
-
-  return (
-    <div
-      ref={pupilRef}
-      className='rounded-full'
-      style={{
-        width: `${size}px`,
-        height: `${size}px`,
-        backgroundColor: pupilColor,
-        transform: `translate(${position.x}px, ${position.y}px)`,
-        transition: 'transform 0.08s ease-out',
-      }}
-    />
-  );
-};
-
-export function Component({ onLoginSuccess }: LoginPageProps) {
-  const [showPassword, setShowPassword] = useState(false);
-  const [email, setEmail] = useState('');
+export default function LoginPage({ onLoginSuccess, onStudentAccess }: LoginPageProps) {
+  const [step, setStep]         = useState<'pick-role' | 'credentials'>('pick-role');
+  const [role, setRole]         = useState<Exclude<UserRole, 'student'> | null>(null);
+  const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [askStaffRole, setAskStaffRole] = useState(false);
-  const [pendingEmail, setPendingEmail] = useState('');
-  const [remember, setRemember] = useState(false);
-  const [adminKey, setAdminKey] = useState('');
-  const [askAdminKey, setAskAdminKey] = useState(false);
+  const [showPw, setShowPw]     = useState(false);
+  const [error, setError]       = useState('');
+  const [loading, setLoading]   = useState(false);
 
-  const isStudentEmail = (value: string) => /^2\w*@pccoepune\.org$/i.test(value.trim());
-  const isAdminEmail = (value: string) => /^admin[a-z0-9]*@pccoepune\.org$/i.test(value.trim());
-  const isStaffDomainEmail = (value: string) => /^[^\s@]+@pccoepune\.org$/i.test(value.trim());
+  const selectedRole = ROLES.find(r => r.role === role);
 
-  const completeLogin = (targetEmail: string, role: UserRole) => {
-    onLoginSuccess({ email: targetEmail.trim().toLowerCase(), role });
+  const handleRolePick = (r: Exclude<UserRole, 'student'>) => {
+    setRole(r);
+    setError('');
+    setEmail('');
+    setPassword('');
+    setStep('credentials');
+  };
+
+  const handleBack = () => {
+    setStep('pick-role');
+    setError('');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!role) return;
     setError('');
-    setAskStaffRole(false);
-    setAskAdminKey(false);
-
-    if (!email || !password) {
-      setError('Please enter email and password.');
-      return;
-    }
-
-    setIsLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 250));
-
-    if (password.length < 4) {
-      setIsLoading(false);
-      setError('Password must be at least 4 characters.');
-      return;
-    }
-
-    // Admin role detection
-    if (isAdminEmail(email)) {
-      setIsLoading(false);
-      setPendingEmail(email);
-      setAskAdminKey(true);
-      return;
-    }
-
-    if (isStudentEmail(email)) {
-      setIsLoading(false);
-      completeLogin(email, 'student');
-      return;
-    }
-
-    if (isStaffDomainEmail(email)) {
-      setIsLoading(false);
-      setPendingEmail(email);
-      setAskStaffRole(true);
-      return;
-    }
-
-    setIsLoading(false);
-    setError('Use a valid pccoepune.org email.');
-  };
-
-  const handleStaffRolePick = (role: StaffRole) => {
-    completeLogin(pendingEmail || email, role);
-  };
-
-  const handleAdminKeySubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (adminKey === 'ADMIN123') {
-      completeLogin(pendingEmail || email, 'admin');
-    } else {
-      setError('Invalid admin verification key.');
-    }
+    setLoading(true);
+    // small artificial delay for UX
+    await new Promise(r => setTimeout(r, 300));
+    const result = onLoginSuccess(email.trim(), password, role);
+    setLoading(false);
+    if (!result.success) setError(result.error ?? 'Invalid credentials.');
   };
 
   return (
-    <div className={cn('min-h-screen grid lg:grid-cols-2 bg-slate-50')}>
-      <div className='relative hidden lg:flex flex-col justify-between bg-gradient-to-br from-sky-600 via-blue-600 to-indigo-700 p-12 text-white overflow-hidden'>
-        <div className='relative z-10'>
-          <div className='flex items-center gap-2 text-lg font-semibold'>
-            <div className='size-8 rounded-lg bg-white/15 backdrop-blur-sm flex items-center justify-center'>
-              <Sparkles className='size-4' />
-            </div>
-            <span>Lab Management</span>
-          </div>
+    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center px-4 py-12">
+      {/* Logo */}
+      <div className="text-center mb-8">
+        <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-sky-500 mb-4 shadow-sm">
+          <FiMonitor size={22} className="text-white" />
         </div>
-
-        <div className='relative z-10 flex items-end justify-center h-[440px]'>
-          <div className='relative w-[460px] h-[330px]'>
-            <div className='absolute left-12 bottom-0 w-40 h-72 rounded-t-[14px] bg-violet-500'>
-              <div className='absolute left-10 top-8 flex gap-8'>
-                <Pupil size={11} />
-                <Pupil size={11} />
-              </div>
-            </div>
-            <div className='absolute left-48 bottom-0 w-32 h-56 rounded-t-[12px] bg-slate-900'>
-              <div className='absolute left-8 top-7 flex gap-6'>
-                <Pupil size={10} pupilColor='white' />
-                <Pupil size={10} pupilColor='white' />
-              </div>
-            </div>
-            <div className='absolute left-0 bottom-0 w-48 h-36 rounded-t-[100px] bg-orange-300'>
-              <div className='absolute left-14 top-14 flex gap-7'>
-                <Pupil size={10} />
-                <Pupil size={10} />
-              </div>
-            </div>
-            <div className='absolute left-[270px] bottom-0 w-40 h-44 rounded-t-[80px] bg-yellow-300'>
-              <div className='absolute left-14 top-8 flex gap-7'>
-                <Pupil size={10} />
-                <Pupil size={10} />
-              </div>
-              <div className='absolute left-[52px] top-[62px] w-14 h-1 rounded-full bg-slate-900' />
-            </div>
-          </div>
-        </div>
-
-        <div className='relative z-10 flex items-center gap-8 text-sm text-white/70'>
-          <span>Privacy</span>
-          <span>Terms</span>
-          <span>Support</span>
-        </div>
-
-        <div className='absolute top-[-80px] right-[-40px] size-64 rounded-full bg-white/10 blur-3xl' />
-        <div className='absolute bottom-[-100px] left-[-60px] size-80 rounded-full bg-white/10 blur-3xl' />
+        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Lab Management System</h1>
+        <p className="text-sm text-slate-500 mt-1">PCCOE Pune</p>
       </div>
 
-      <div className='flex items-center justify-center p-8 bg-white'>
-        <div className='w-full max-w-[420px]'>
-          <div className='lg:hidden flex items-center justify-center gap-2 text-lg font-semibold mb-10'>
-            <div className='size-8 rounded-lg bg-sky-100 flex items-center justify-center'>
-              <Sparkles className='size-4 text-sky-600' />
-            </div>
-            <span>Lab Management</span>
-          </div>
+      <div className="w-full max-w-sm">
 
-          <div className='text-center mb-8'>
-            <h1 className='text-3xl font-bold tracking-tight mb-2 text-slate-900'>Welcome back!</h1>
-            <p className='text-slate-500 text-sm'>Sign in with your institutional email</p>
-          </div>
-
-          <form onSubmit={handleSubmit} className='space-y-5'>
-            <div className='space-y-2'>
-              <Label htmlFor='email'>Email</Label>
-              <Input
-                id='email'
-                type='email'
-                placeholder='2x123@pccoepune.org or admin@pccoepune.org'
-                value={email}
-                autoComplete='off'
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className='h-12'
-              />
-            </div>
-
-            <div className='space-y-2'>
-              <Label htmlFor='password'>Password</Label>
-              <div className='relative'>
-                <Input
-                  id='password'
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder='â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢'
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className='h-12 pr-10'
-                />
-                <button
-                  type='button'
-                  onClick={() => setShowPassword(!showPassword)}
-                  className='absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 transition-colors'
-                >
-                  {showPassword ? <EyeOff className='size-5' /> : <Eye className='size-5' />}
-                </button>
+        {/* ── STEP 1: Role selector ─────────────────────────────── */}
+        {step === 'pick-role' && (
+          <div className="space-y-3">
+            {/* Student */}
+            <button
+              onClick={onStudentAccess}
+              className="w-full flex items-center gap-4 px-5 py-4 bg-sky-500 hover:bg-sky-600 active:bg-sky-700 text-white rounded-xl transition-colors shadow-sm"
+            >
+              <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+                <FiMonitor size={18} />
               </div>
+              <div className="text-left">
+                <p className="font-semibold text-sm">Browse as Student</p>
+                <p className="text-xs text-sky-100 mt-0.5">View labs & PCs — no login needed</p>
+              </div>
+            </button>
+
+            <div className="flex items-center gap-3 py-1">
+              <div className="flex-1 h-px bg-slate-200" />
+              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Staff Login</span>
+              <div className="flex-1 h-px bg-slate-200" />
             </div>
 
-            <div className='flex items-center justify-between'>
-              <div className='flex items-center space-x-2'>
-                <Checkbox id='remember' checked={remember} onCheckedChange={(v) => setRemember(Boolean(v))} />
-                <Label htmlFor='remember' className='text-sm font-normal cursor-pointer'>
-                  Remember for 30 days
-                </Label>
-              </div>
-              <button type='button' className='text-sm text-sky-700 hover:underline font-medium'>
-                Forgot password?
+            {ROLES.map(item => (
+              <button
+                key={item.role}
+                onClick={() => handleRolePick(item.role)}
+                className={`w-full flex items-center gap-4 px-5 py-4 rounded-xl border-2 bg-white transition-colors ${item.border}`}
+              >
+                <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${item.iconBg} ${item.accent}`}>
+                  {item.icon}
+                </div>
+                <div className="text-left">
+                  <p className={`font-semibold text-sm ${item.accent}`}>{item.label}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">{item.sub}</p>
+                </div>
               </button>
+            ))}
+          </div>
+        )}
+
+        {/* ── STEP 2: Credentials ───────────────────────────────── */}
+        {step === 'credentials' && selectedRole && (
+          <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-6">
+            {/* Back + role badge */}
+            <div className="flex items-center gap-3 mb-6">
+              <button onClick={handleBack} className="text-slate-400 hover:text-slate-700 transition-colors">
+                <FiArrowLeft size={18} />
+              </button>
+              <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold ${selectedRole.iconBg} ${selectedRole.accent}`}>
+                {selectedRole.icon}
+                {selectedRole.label}
+              </div>
             </div>
 
-            {error && (
-              <div className='p-3 text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-lg'>
-                {error}
-              </div>
-            )}
+            <h2 className="text-lg font-bold text-slate-900 mb-1">Sign in</h2>
+            <p className="text-sm text-slate-500 mb-5">Enter your credentials to continue</p>
 
-            {askAdminKey && (
-              <div className='p-4 border border-red-200 bg-red-50 rounded-lg space-y-3'>
-                <p className='text-sm text-red-800 font-medium'>Admin access detected. Enter verification key:</p>
-                <Input
-                  type='password'
-                  placeholder='Enter admin key'
-                  value={adminKey}
-                  onChange={(e) => setAdminKey(e.target.value)}
-                  className='h-10'
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Email</label>
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-transparent"
+                  placeholder="you@pccoepune.org"
+                  autoFocus
                 />
-                <div className='flex gap-2'>
-                  <Button type='button' variant='outline' onClick={() => {
-                    setAskAdminKey(false);
-                    setAdminKey('');
-                    setError('');
-                  }} className='flex-1'>
-                    Cancel
-                  </Button>
-                  <Button type='button' onClick={handleAdminKeySubmit} className='flex-1 bg-red-600 hover:bg-red-700'>
-                    Verify
-                  </Button>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Password</label>
+                <div className="relative mt-1">
+                  <input
+                    type={showPw ? 'text' : 'password'}
+                    required
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-transparent"
+                    placeholder="••••••••"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPw(v => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    {showPw ? <FiEyeOff size={15} /> : <FiEye size={15} />}
+                  </button>
                 </div>
               </div>
-            )}
 
-            {askStaffRole && (
-              <div className='p-4 border border-amber-200 bg-amber-50 rounded-lg space-y-3'>
-                <p className='text-sm text-amber-800 font-medium'>Staff domain detected. Choose your role:</p>
-                <div className='grid grid-cols-2 gap-2'>
-                  <Button type='button' variant='outline' onClick={() => handleStaffRolePick('labAssistant')}>
-                    Lab Assistant
-                  </Button>
-                  <Button type='button' variant='outline' onClick={() => handleStaffRolePick('faculty')}>
-                    Faculty
-                  </Button>
+              {error && (
+                <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 rounded-lg">
+                  {error}
                 </div>
-              </div>
-            )}
+              )}
 
-            <Button type='submit' className='w-full h-12 text-base font-medium' size='lg' disabled={isLoading || askAdminKey || askStaffRole}>
-              {isLoading ? 'Signing in...' : 'Log in'}
-            </Button>
-          </form>
-
-          <div className='mt-6'>
-            <Button variant='outline' className='w-full h-12' type='button'>
-              <Mail className='mr-2 size-5' />
-              Log in with Google
-            </Button>
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-sky-500 hover:bg-sky-600 disabled:opacity-60 text-white font-semibold py-2.5 rounded-lg text-sm transition-colors"
+              >
+                {loading ? 'Signing in…' : 'Sign In'}
+              </button>
+            </form>
           </div>
-        </div>
+        )}
       </div>
+
+      <p className="mt-8 text-xs text-slate-400 text-center">PCCOE Lab Management System — Demo Environment</p>
     </div>
   );
 }
-
-export default Component;
