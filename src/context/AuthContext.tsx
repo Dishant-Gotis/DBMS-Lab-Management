@@ -1,120 +1,93 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { User, UserRole, AuthContextType, LabAssistantRecord } from '../types';
+import { userStore, type AppUser, type AppRole } from '../store/userStore';
+
+// ── Types ────────────────────────────────────────────────────────────────────
+export interface AuthUser {
+  id: string;
+  name: string;
+  email: string;
+  role: AppRole | 'student';
+  assignedLabs: string[];
+}
+
+interface AuthContextType {
+  user: AuthUser;
+  role: AppRole | 'student';
+  isAuthenticated: boolean;
+  loginWithCredentials: (email: string, password: string) => { success: boolean; error?: string };
+  loginAsStudent: () => void;
+  logout: () => void;
+}
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-interface AuthProviderProps {
-  children: ReactNode;
+// ── Session persistence ──────────────────────────────────────────────────────
+const SESSION_KEY = 'lms_auth';
+
+const GUEST: AuthUser = {
+  id: 'guest',
+  name: 'Guest',
+  email: '',
+  role: 'student',
+  assignedLabs: [],
+};
+
+function saveSession(user: AuthUser, authenticated: boolean) {
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify({ user, authenticated }));
+}
+function loadSession(): { user: AuthUser; authenticated: boolean } {
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return { user: GUEST, authenticated: false };
 }
 
-// Mock database for lab assistants (in production, this would be in backend)
-const mockAssistantsDB: LabAssistantRecord[] = [
-  {
-    id: 'asst-001',
-    name: 'Raj Patel',
-    email: 'rajpatel@pccoepune.org',
-    assignedLabs: ['6101', '6102', '6103'],
-    createdDate: '2024-01-15',
-  },
-  {
-    id: 'asst-002',
-    name: 'Priya Sharma',
-    email: 'priyasharma@pccoepune.org',
-    assignedLabs: ['6104', '6105'],
-    createdDate: '2024-01-20',
-  },
-  {
-    id: 'asst-003',
-    name: 'Vikram Singh',
-    email: 'vikramsingh@pccoepune.org',
-    assignedLabs: ['6106', '6107', '6108'],
-    createdDate: '2024-01-25',
-  },
-];
+function appUserToAuthUser(u: AppUser): AuthUser {
+  return { id: u.id, name: u.name, email: u.email, role: u.role, assignedLabs: u.assignedLabs };
+}
 
-export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState<User>({
-    id: 'user-001',
-    name: 'Guest User',
-    email: 'guest@pccoepune.org',
-    role: 'student',
-    assignedLabs: [],
-  });
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [assistantsDB] = useState<LabAssistantRecord[]>(mockAssistantsDB);
+// ── Provider ─────────────────────────────────────────────────────────────────
+export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const saved = loadSession();
+  const [currentUser, setCurrentUser] = useState<AuthUser>(saved.user);
+  const [isAuthenticated, setIsAuthenticated] = useState(saved.authenticated);
 
-  const login = (email: string, role: Exclude<UserRole, 'admin'> | 'admin') => {
-    const normalizedEmail = email.trim().toLowerCase();
-    const prefix = normalizedEmail.split('@')[0] || 'user';
-    const displayName = prefix
-      .replace(/[._-]+/g, ' ')
-      .replace(/\b\w/g, m => m.toUpperCase());
+  const loginWithCredentials = (email: string, password: string): { success: boolean; error?: string } => {
+    const found = userStore.validate(email, password);
+    if (!found) return { success: false, error: 'Invalid email or password.' };
 
-    // For lab assistants, find their assigned labs from database
-    let assignedLabs: string[] = [];
-    if (role === 'labAssistant') {
-      const assistant = assistantsDB.find(a => a.email === normalizedEmail);
-      assignedLabs = assistant?.assignedLabs || [];
-    }
-
-    setCurrentUser({
-      id: `user-${Date.now()}`,
-      name: displayName,
-      email: normalizedEmail,
-      role,
-      assignedLabs,
-    });
+    // Re-read from store in case labs were assigned since last load
+    const fresh = userStore.findByEmail(email)!;
+    const authUser = appUserToAuthUser(fresh);
+    setCurrentUser(authUser);
     setIsAuthenticated(true);
+    saveSession(authUser, true);
+    return { success: true };
   };
 
-  const loginAsAdmin = (email: string) => {
-    const normalizedEmail = email.trim().toLowerCase();
-    const prefix = normalizedEmail.split('@')[0] || 'admin';
-    const displayName = prefix
-      .replace(/[._-]+/g, ' ')
-      .replace(/\b\w/g, m => m.toUpperCase());
-
-    setCurrentUser({
-      id: `admin-${Date.now()}`,
-      name: displayName,
-      email: normalizedEmail,
-      role: 'admin',
-      assignedLabs: [], // Admin doesn't have limited labs
-    });
+  const loginAsStudent = () => {
+    const student: AuthUser = { id: 'student', name: 'Student', email: '', role: 'student', assignedLabs: [] };
+    setCurrentUser(student);
     setIsAuthenticated(true);
+    saveSession(student, true);
   };
 
   const logout = () => {
+    sessionStorage.removeItem(SESSION_KEY);
     setIsAuthenticated(false);
-    setCurrentUser({
-      id: 'user-001',
-      name: 'Guest User',
-      email: 'guest@pccoepune.org',
-      role: 'student',
-      assignedLabs: [],
-    });
-  };
-
-  const value: AuthContextType = {
-    user: currentUser,
-    role: currentUser.role,
-    isAuthenticated,
-    login,
-    loginAsAdmin,
-    logout,
+    setCurrentUser(GUEST);
   };
 
   return (
-    <AuthContext.Provider value={value}>
+    <AuthContext.Provider value={{ user: currentUser, role: currentUser.role, isAuthenticated, loginWithCredentials, loginAsStudent, logout }}>
       {children}
     </AuthContext.Provider>
   );
 };
 
 export const useAuth = (): AuthContextType => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within AuthProvider');
-  }
-  return context;
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
+  return ctx;
 };

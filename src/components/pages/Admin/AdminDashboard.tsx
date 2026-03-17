@@ -1,377 +1,299 @@
-﻿import React, { useState, useMemo } from 'react';
-import { Card } from '../../common/Card';
-import { SearchBar } from '../../common/SearchBar';
+import React, { useState, useMemo, useCallback } from 'react';
 import { Modal } from '../../common/Modal';
 import { Button } from '../../common/Button';
-import { FiPlus, FiTrash2, FiEdit2, FiUsers, FiBox } from 'react-icons/fi';
+import { SearchBar } from '../../common/SearchBar';
+import { FiPlus, FiTrash2, FiBox, FiUsers, FiTool, FiCheck } from 'react-icons/fi';
+import { userStore, type AppUser, type AppRole } from '../../../store/userStore';
+import { getAllLabs } from '../../../utils/labData';
 
-interface LabRecord {
-  labNo: string;
-  name: string;
-  capacity: number;
-  assignedAssistantId?: string;
-  assignedAssistantName?: string;
+const ALL_LABS = getAllLabs();
+
+// ── Small hook so component re-renders when store changes ────────────────────
+function useUsers() {
+  const [tick, setTick] = useState(0);
+  const refresh = useCallback(() => setTick(t => t + 1), []);
+  const users = useMemo(() => userStore.getAll().filter(u => u.role !== 'admin'), [tick]);
+  return { users, refresh };
 }
 
-interface AssistantRecord {
-  id: string;
-  name: string;
-  email: string;
-  assignedLabs: string[];
-  createdDate: string;
+// ── Lab assign multi-select modal ────────────────────────────────────────────
+interface AssignLabsModalProps {
+  user: AppUser;
+  onSave: (labNos: string[]) => void;
+  onClose: () => void;
 }
-
-const AdminDashboard: React.FC = () => {
-  const [tab, setTab] = useState<'labs' | 'assistants'>('labs');
+const AssignLabsModal: React.FC<AssignLabsModalProps> = ({ user, onSave, onClose }) => {
+  const [selected, setSelected] = useState<Set<string>>(new Set(user.assignedLabs));
   const [query, setQuery] = useState('');
-  const [allLabs, setAllLabs] = useState<LabRecord[]>([
-    { labNo: '6101', name: 'Computer Lab 6101', capacity: 30, assignedAssistantId: 'asst-001', assignedAssistantName: 'Raj Patel' },
-    { labNo: '6102', name: 'Computer Lab 6102', capacity: 30, assignedAssistantId: 'asst-001', assignedAssistantName: 'Raj Patel' },
-    { labNo: '6103', name: 'Computer Lab 6103', capacity: 30, assignedAssistantId: 'asst-001', assignedAssistantName: 'Raj Patel' },
-    { labNo: '6104', name: 'Computer Lab 6104', capacity: 30, assignedAssistantId: 'asst-002', assignedAssistantName: 'Priya Sharma' },
-    { labNo: '6105', name: 'Computer Lab 6105', capacity: 30, assignedAssistantId: 'asst-002', assignedAssistantName: 'Priya Sharma' },
-    { labNo: '6106', name: 'Computer Lab 6106', capacity: 30, assignedAssistantId: 'asst-003', assignedAssistantName: 'Vikram Singh' },
-    { labNo: '6107', name: 'Computer Lab 6107', capacity: 30, assignedAssistantId: 'asst-003', assignedAssistantName: 'Vikram Singh' },
-    { labNo: '6108', name: 'Computer Lab 6108', capacity: 30, assignedAssistantId: 'asst-003', assignedAssistantName: 'Vikram Singh' },
-  ]);
 
-  const [allAssistants, setAllAssistants] = useState<AssistantRecord[]>([
-    { id: 'asst-001', name: 'Raj Patel', email: 'rajpatel@pccoepune.org', assignedLabs: ['6101', '6102', '6103'], createdDate: '2024-01-15' },
-    { id: 'asst-002', name: 'Priya Sharma', email: 'priyasharma@pccoepune.org', assignedLabs: ['6104', '6105'], createdDate: '2024-01-20' },
-    { id: 'asst-003', name: 'Vikram Singh', email: 'vikramsingh@pccoepune.org', assignedLabs: ['6106', '6107', '6108'], createdDate: '2024-01-25' },
-  ]);
+  const filtered = useMemo(() => {
+    const q = query.toLowerCase();
+    return ALL_LABS.filter(l =>
+      l.labNo.toLowerCase().includes(q) || l.name.toLowerCase().includes(q)
+    );
+  }, [query]);
 
-  const [showAddLabModal, setShowAddLabModal] = useState(false);
-  const [showAddAssistantModal, setShowAddAssistantModal] = useState(false);
-  const [showAssignLabModal, setShowAssignLabModal] = useState(false);
-  const [selectedLab, setSelectedLab] = useState<LabRecord | null>(null);
-  const [newLabForm, setNewLabForm] = useState({ labNo: '', name: '', capacity: 30 });
-  const [newAssistantForm, setNewAssistantForm] = useState({ name: '', email: '' });
-  const [selectedAssistantId, setSelectedAssistantId] = useState<string>('');
-
-  const filteredLabs = useMemo(() => {
-    if (!query.trim()) return allLabs;
-    const normalized = query.toLowerCase();
-    return allLabs.filter(lab => lab.labNo.includes(normalized) || lab.name.toLowerCase().includes(normalized));
-  }, [query, allLabs]);
-
-  const filteredAssistants = useMemo(() => {
-    if (!query.trim()) return allAssistants;
-    const normalized = query.toLowerCase();
-    return allAssistants.filter(asst => asst.name.toLowerCase().includes(normalized) || asst.email.includes(normalized));
-  }, [query, allAssistants]);
-
-  const handleAddLab = () => {
-    if (newLabForm.labNo && newLabForm.name) {
-      setAllLabs([...allLabs, { ...newLabForm, capacity: Number(newLabForm.capacity) }]);
-      setNewLabForm({ labNo: '', name: '', capacity: 30 });
-      setShowAddLabModal(false);
-    }
-  };
-
-  const handleAddAssistant = () => {
-    if (newAssistantForm.name && newAssistantForm.email) {
-      const newAssistant: AssistantRecord = {
-        id: `asst-${Date.now()}`,
-        name: newAssistantForm.name,
-        email: newAssistantForm.email,
-        assignedLabs: [],
-        createdDate: new Date().toISOString().split('T')[0],
-      };
-      setAllAssistants([...allAssistants, newAssistant]);
-      setNewAssistantForm({ name: '', email: '' });
-      setShowAddAssistantModal(false);
-    }
-  };
-
-  const handleAssignLab = () => {
-    if (selectedLab && selectedAssistantId) {
-      const assistant = allAssistants.find(a => a.id === selectedAssistantId);
-      if (assistant) {
-        setAllAssistants(allAssistants.map(a =>
-          a.id === selectedAssistantId
-            ? { ...a, assignedLabs: a.assignedLabs.includes(selectedLab.labNo) ? a.assignedLabs : [...a.assignedLabs, selectedLab.labNo] }
-            : a
-        ));
-        setAllLabs(allLabs.map(l =>
-          l.labNo === selectedLab.labNo
-            ? { ...l, assignedAssistantId: selectedAssistantId, assignedAssistantName: assistant.name }
-            : l
-        ));
-        setShowAssignLabModal(false);
-        setSelectedLab(null);
-        setSelectedAssistantId('');
-      }
-    }
-  };
-
-  const handleUnassignLab = (labNo: string) => {
-    const lab = allLabs.find(l => l.labNo === labNo);
-    if (lab && lab.assignedAssistantId) {
-      setAllAssistants(allAssistants.map(a =>
-        a.id === lab.assignedAssistantId
-          ? { ...a, assignedLabs: a.assignedLabs.filter(l => l !== labNo) }
-          : a
-      ));
-      setAllLabs(allLabs.map(l =>
-        l.labNo === labNo
-          ? { ...l, assignedAssistantId: undefined, assignedAssistantName: undefined }
-          : l
-      ));
-    }
-  };
-
-  const handleDeleteAssistant = (assistantId: string) => {
-    setAllLabs(allLabs.map(l =>
-      l.assignedAssistantId === assistantId
-        ? { ...l, assignedAssistantId: undefined, assignedAssistantName: undefined }
-        : l
-    ));
-    setAllAssistants(allAssistants.filter(a => a.id !== assistantId));
-  };
+  const toggle = (labNo: string) =>
+    setSelected(prev => {
+      const next = new Set(prev);
+      next.has(labNo) ? next.delete(labNo) : next.add(labNo);
+      return next;
+    });
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">Admin Dashboard</h1>
-          <p className="text-slate-500 mt-1">Manage labs and lab assistants</p>
+    <Modal
+      isOpen
+      onClose={onClose}
+      title={`Assign Labs — ${user.name}`}
+      size="md"
+      footer={
+        <div className="flex justify-between items-center w-full">
+          <span className="text-xs text-slate-500">{selected.size} lab(s) selected</span>
+          <div className="flex gap-2">
+            <Button label="Cancel" variant="secondary" onClick={onClose} />
+            <Button label="Save Assignment" onClick={() => onSave([...selected])} />
+          </div>
         </div>
+      }
+    >
+      <div className="mb-3">
+        <input
+          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400"
+          placeholder="Search labs..."
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+        />
+      </div>
+      <div className="space-y-1 max-h-80 overflow-y-auto">
+        {filtered.map(lab => {
+          const checked = selected.has(lab.labNo);
+          return (
+            <label
+              key={lab.labNo}
+              className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${
+                checked ? 'bg-sky-50 border border-sky-200' : 'hover:bg-slate-50 border border-transparent'
+              }`}
+            >
+              <input
+                type="checkbox"
+                className="accent-sky-500"
+                checked={checked}
+                onChange={() => toggle(lab.labNo)}
+              />
+              <div className="flex-1 min-w-0">
+                <span className="text-sm font-medium text-slate-800">{lab.labNo}</span>
+                <span className="ml-2 text-xs text-slate-400">{lab.name}</span>
+              </div>
+              {checked && <FiCheck size={13} className="text-sky-500 shrink-0" />}
+            </label>
+          );
+        })}
+      </div>
+    </Modal>
+  );
+};
+
+// ── Add User modal ────────────────────────────────────────────────────────────
+interface AddUserModalProps {
+  targetRole: 'faculty' | 'labAssistant';
+  onSave: (data: { name: string; email: string; password: string }) => void;
+  onClose: () => void;
+}
+const AddUserModal: React.FC<AddUserModalProps> = ({ targetRole, onSave, onClose }) => {
+  const [form, setForm] = useState({ name: '', email: '', password: '' });
+  const valid = form.name.trim() && form.email.trim() && form.password.trim();
+  const label = targetRole === 'faculty' ? 'Faculty' : 'Lab Assistant';
+
+  return (
+    <Modal
+      isOpen
+      onClose={onClose}
+      title={`Add ${label}`}
+      size="sm"
+      footer={
+        <div className="flex justify-end gap-2 w-full">
+          <Button label="Cancel" variant="secondary" onClick={onClose} />
+          <Button label="Create Account" disabled={!valid} onClick={() => onSave(form)} />
+        </div>
+      }
+    >
+      <div className="space-y-3">
+        {(['name', 'email', 'password'] as const).map(field => (
+          <label key={field} className="block text-sm text-slate-600">
+            <span className="capitalize font-medium">{field} *</span>
+            <input
+              type={field === 'password' ? 'password' : field === 'email' ? 'email' : 'text'}
+              className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400"
+              value={form[field]}
+              onChange={e => setForm(f => ({ ...f, [field]: e.target.value }))}
+              placeholder={field === 'email' ? 'user@pccoepune.org' : field === 'password' ? 'min 6 chars' : `${label} name`}
+            />
+          </label>
+        ))}
+        <p className="text-xs text-slate-400">The user will log in with these credentials.</p>
+      </div>
+    </Modal>
+  );
+};
+
+// ── Main Admin Dashboard ─────────────────────────────────────────────────────
+const AdminDashboard: React.FC = () => {
+  const { users, refresh } = useUsers();
+  const [tab, setTab]               = useState<'faculty' | 'labAssistant'>('faculty');
+  const [query, setQuery]           = useState('');
+  const [addModalRole, setAddModalRole] = useState<'faculty' | 'labAssistant' | null>(null);
+  const [assignUser, setAssignUser] = useState<AppUser | null>(null);
+
+  const filtered = useMemo(() => {
+    const q = query.toLowerCase();
+    return users.filter(u => u.role === tab && (
+      u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)
+    ));
+  }, [users, tab, query]);
+
+  const handleAdd = (data: { name: string; email: string; password: string }) => {
+    userStore.add({ ...data, role: addModalRole!, assignedLabs: [] });
+    refresh();
+    setAddModalRole(null);
+  };
+
+  const handleAssignSave = (labNos: string[]) => {
+    if (assignUser) { userStore.assignLabs(assignUser.id, labNos); refresh(); setAssignUser(null); }
+  };
+
+  const handleDelete = (id: string) => {
+    if (window.confirm('Delete this user?')) { userStore.remove(id); refresh(); }
+  };
+
+  const tabLabel = (r: AppRole) => r === 'faculty' ? 'Faculty' : 'Lab Assistants';
+  const roleIcon = (r: AppRole) => r === 'faculty' ? <FiUsers size={14} /> : <FiTool size={14} />;
+  const roleColor = (r: AppRole) => r === 'faculty' ? 'text-violet-700 bg-violet-50' : 'text-amber-700 bg-amber-50';
+
+  const allUsers = userStore.getAll();
+  const stats = [
+    { label: 'Total Faculty',    value: allUsers.filter(u => u.role === 'faculty').length,      color: 'text-violet-600' },
+    { label: 'Lab Assistants',   value: allUsers.filter(u => u.role === 'labAssistant').length, color: 'text-amber-600' },
+    { label: 'Total Labs',       value: ALL_LABS.length,                                         color: 'text-sky-600' },
+    { label: 'Labs Assigned',    value: allUsers.flatMap(u => u.assignedLabs).filter((v, i, a) => a.indexOf(v) === i).length, color: 'text-emerald-600' },
+  ];
+
+  return (
+    <div className="space-y-5">
+      {/* Modals */}
+      {addModalRole && <AddUserModal targetRole={addModalRole} onSave={handleAdd} onClose={() => setAddModalRole(null)} />}
+      {assignUser && <AssignLabsModal user={assignUser} onSave={handleAssignSave} onClose={() => setAssignUser(null)} />}
+
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl font-semibold text-slate-900">Admin Dashboard</h1>
+        <p className="text-sm text-slate-500 mt-1">Manage faculty, lab assistants, and lab assignments</p>
       </div>
 
-      <div className="flex gap-2 border-b border-slate-200">
-        <button
-          onClick={() => setTab('labs')}
-          className={`px-4 py-3 font-medium text-sm transition-colors border-b-2 ${
-            tab === 'labs' ? 'text-sky-600 border-sky-600' : 'text-slate-600 border-transparent hover:text-slate-900'
-          }`}
-        >
-          <FiBox className="inline mr-2" size={16} />
-          Labs ({filteredLabs.length})
-        </button>
-        <button
-          onClick={() => setTab('assistants')}
-          className={`px-4 py-3 font-medium text-sm transition-colors border-b-2 ${
-            tab === 'assistants' ? 'text-sky-600 border-sky-600' : 'text-slate-600 border-transparent hover:text-slate-900'
-          }`}
-        >
-          <FiUsers className="inline mr-2" size={16} />
-          Lab Assistants ({filteredAssistants.length})
-        </button>
+      {/* Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {stats.map(s => (
+          <div key={s.label} className="bg-white border border-slate-200 rounded-lg px-5 py-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">{s.label}</p>
+            <p className={`text-3xl font-bold font-mono ${s.color}`}>{s.value}</p>
+          </div>
+        ))}
       </div>
 
-      {tab === 'labs' && (
-        <div className="space-y-4">
-          <div className="flex gap-3 items-center">
-            <SearchBar onSearch={setQuery} placeholder="Search labs..." />
-            <Button label="Add Lab" icon={<FiPlus size={16} />} onClick={() => setShowAddLabModal(true)} />
-          </div>
-
-          <div className="grid grid-cols-3 gap-4">
-            <Card className="p-5">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Total Labs</p>
-              <p className="text-3xl font-bold text-slate-900 mt-2">{allLabs.length}</p>
-            </Card>
-            <Card className="p-5">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Assigned</p>
-              <p className="text-3xl font-bold text-sky-600 mt-2">{allLabs.filter(l => l.assignedAssistantId).length}</p>
-            </Card>
-            <Card className="p-5">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Unassigned</p>
-              <p className="text-3xl font-bold text-amber-600 mt-2">{allLabs.filter(l => !l.assignedAssistantId).length}</p>
-            </Card>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {filteredLabs.map(lab => (
-              <Card key={lab.labNo} className="p-4 hover:border-sky-300 hover:bg-sky-50/30 transition-all">
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <p className="font-semibold text-slate-900">{lab.labNo}</p>
-                    <p className="text-xs text-slate-500">{lab.name}</p>
-                  </div>
-                  <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
-                    lab.assignedAssistantId ? 'bg-sky-100 text-sky-700' : 'bg-amber-100 text-amber-700'
-                  }`}>
-                    {lab.assignedAssistantId ? 'Assigned' : 'Unassigned'}
-                  </span>
-                </div>
-                <div className="bg-slate-50 rounded p-2 mb-3 text-xs text-slate-600">
-                  <p className="font-medium text-slate-700">Capacity: {lab.capacity} PCs</p>
-                  {lab.assignedAssistantName && (
-                    <p className="text-slate-500 mt-1">Assistant: {lab.assignedAssistantName}</p>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    label={lab.assignedAssistantId ? 'Change' : 'Assign'}
-                    icon={<FiEdit2 size={12} />}
-                    onClick={() => { setSelectedLab(lab); setShowAssignLabModal(true); }}
-                    variant="secondary"
-                    size="sm"
-                  />
-                  {lab.assignedAssistantId && (
-                    <Button
-                      label="Unassign"
-                      icon={<FiTrash2 size={12} />}
-                      onClick={() => handleUnassignLab(lab.labNo)}
-                      variant="danger"
-                      size="sm"
-                    />
-                  )}
-                </div>
-              </Card>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {tab === 'assistants' && (
-        <div className="space-y-4">
-          <div className="flex gap-3 items-center">
-            <SearchBar onSearch={setQuery} placeholder="Search assistants..." />
-            <Button label="Add Assistant" icon={<FiPlus size={16} />} onClick={() => setShowAddAssistantModal(true)} />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <Card className="p-5">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Total Assistants</p>
-              <p className="text-3xl font-bold text-slate-900 mt-2">{allAssistants.length}</p>
-            </Card>
-            <Card className="p-5">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Labs Managed</p>
-              <p className="text-3xl font-bold text-sky-600 mt-2">{allAssistants.reduce((sum, a) => sum + a.assignedLabs.length, 0)}</p>
-            </Card>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            {filteredAssistants.map(assistant => (
-              <Card key={assistant.id} className="p-4 hover:border-sky-300 hover:bg-sky-50/30 transition-all">
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <p className="font-semibold text-slate-900">{assistant.name}</p>
-                    <p className="text-xs text-slate-500">{assistant.email}</p>
-                  </div>
-                  <span className="text-xs text-slate-400">Added: {assistant.createdDate}</span>
-                </div>
-                <div className="bg-slate-50 rounded p-2 mb-3">
-                  <p className="text-xs font-medium text-slate-700">Assigned Labs:</p>
-                  {assistant.assignedLabs.length > 0 ? (
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {assistant.assignedLabs.map(labNo => (
-                        <span key={labNo} className="bg-sky-100 text-sky-700 text-xs px-2 py-0.5 rounded">{labNo}</span>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-slate-400 mt-1">No labs assigned</p>
-                  )}
-                </div>
-                <Button
-                  label="Remove"
-                  icon={<FiTrash2 size={12} />}
-                  onClick={() => handleDeleteAssistant(assistant.id)}
-                  variant="danger"
-                  size="sm"
-                />
-              </Card>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <Modal
-        isOpen={showAddLabModal}
-        onClose={() => setShowAddLabModal(false)}
-        title="Add New Lab"
-        size="md"
-        footer={
-          <div className="flex justify-end gap-2 w-full">
-            <Button label="Cancel" variant="secondary" onClick={() => setShowAddLabModal(false)} />
-            <Button label="Add Lab" onClick={handleAddLab} />
-          </div>
-        }
-      >
-        <div className="space-y-4">
-          <div>
-            <label className="text-sm font-medium text-slate-700 block mb-1">Lab Number</label>
-            <input type="text" placeholder="e.g., 6109" value={newLabForm.labNo}
-              onChange={(e) => setNewLabForm({ ...newLabForm, labNo: e.target.value })}
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500" />
-          </div>
-          <div>
-            <label className="text-sm font-medium text-slate-700 block mb-1">Lab Name</label>
-            <input type="text" placeholder="e.g., Computer Lab 6109" value={newLabForm.name}
-              onChange={(e) => setNewLabForm({ ...newLabForm, name: e.target.value })}
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500" />
-          </div>
-          <div>
-            <label className="text-sm font-medium text-slate-700 block mb-1">Capacity (PCs)</label>
-            <input type="number" value={newLabForm.capacity}
-              onChange={(e) => setNewLabForm({ ...newLabForm, capacity: Number(e.target.value) })}
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500" />
-          </div>
-        </div>
-      </Modal>
-
-      <Modal
-        isOpen={showAddAssistantModal}
-        onClose={() => setShowAddAssistantModal(false)}
-        title="Add Lab Assistant"
-        size="md"
-        footer={
-          <div className="flex justify-end gap-2 w-full">
-            <Button label="Cancel" variant="secondary" onClick={() => setShowAddAssistantModal(false)} />
-            <Button label="Add Assistant" onClick={handleAddAssistant} />
-          </div>
-        }
-      >
-        <div className="space-y-4">
-          <div>
-            <label className="text-sm font-medium text-slate-700 block mb-1">Name</label>
-            <input type="text" placeholder="e.g., John Doe" value={newAssistantForm.name}
-              onChange={(e) => setNewAssistantForm({ ...newAssistantForm, name: e.target.value })}
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500" />
-          </div>
-          <div>
-            <label className="text-sm font-medium text-slate-700 block mb-1">Email</label>
-            <input type="email" placeholder="name@pccoepune.org" value={newAssistantForm.email}
-              onChange={(e) => setNewAssistantForm({ ...newAssistantForm, email: e.target.value })}
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500" />
-          </div>
-        </div>
-      </Modal>
-
-      <Modal
-        isOpen={showAssignLabModal}
-        onClose={() => setShowAssignLabModal(false)}
-        title={`Assign Lab ${selectedLab?.labNo ?? ''}`}
-        size="md"
-        footer={
-          <div className="flex justify-end gap-2 w-full">
-            <Button label="Cancel" variant="secondary" onClick={() => setShowAssignLabModal(false)} />
-            <Button label="Assign Lab" onClick={handleAssignLab} disabled={!selectedAssistantId} />
-          </div>
-        }
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-slate-600">Select a lab assistant to assign this lab to:</p>
-          <div className="space-y-2">
-            {allAssistants.map(assistant => (
+      {/* User management panel */}
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+        {/* Tabs + actions */}
+        <div className="px-5 py-3.5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex rounded-lg bg-slate-100 p-0.5 gap-0.5">
+            {(['faculty', 'labAssistant'] as const).map(r => (
               <button
-                key={assistant.id}
-                onClick={() => setSelectedAssistantId(assistant.id)}
-                className={`w-full text-left px-4 py-3 rounded-lg border-2 transition-colors ${
-                  selectedAssistantId === assistant.id ? 'border-sky-500 bg-sky-50' : 'border-slate-200 hover:border-slate-300'
+                key={r}
+                onClick={() => setTab(r)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                  tab === r ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
                 }`}
               >
-                <p className="font-medium text-slate-900">{assistant.name}</p>
-                <p className="text-xs text-slate-500">{assistant.email}</p>
-                <p className="text-xs text-slate-400 mt-1">{assistant.assignedLabs.length} labs assigned</p>
+                {roleIcon(r)} {tabLabel(r)} ({allUsers.filter(u => u.role === r).length})
               </button>
             ))}
           </div>
+          <div className="flex items-center gap-2 sm:ml-auto">
+            <SearchBar onSearch={setQuery} placeholder={`Search ${tabLabel(tab).toLowerCase()}...`} />
+            <Button
+              label={`Add ${tab === 'faculty' ? 'Faculty' : 'Assistant'}`}
+              icon={<FiPlus size={14} />}
+              onClick={() => setAddModalRole(tab)}
+            />
+          </div>
         </div>
-      </Modal>
+
+        {/* User table */}
+        {filtered.length === 0 ? (
+          <div className="px-5 py-12 text-center text-slate-400">
+            <FiBox size={32} className="mx-auto mb-3 opacity-30" />
+            <p className="text-sm">No {tabLabel(tab).toLowerCase()} yet. Click "Add" to create one.</p>
+          </div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 bg-slate-50">
+                <th className="text-left px-5 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-400">Name</th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-400 hidden sm:table-cell">Email</th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-400">Assigned Labs</th>
+                <th className="px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-400 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filtered.map(u => (
+                <tr key={u.id} className="hover:bg-slate-50/60 transition-colors">
+                  <td className="px-5 py-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 ${roleColor(u.role as AppRole)}`}>
+                        {u.name.charAt(0).toUpperCase()}
+                      </div>
+                      <span className="font-medium text-slate-800">{u.name}</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-slate-500 hidden sm:table-cell font-mono text-xs">{u.email}</td>
+                  <td className="px-4 py-3">
+                    {u.assignedLabs.length === 0 ? (
+                      <span className="text-xs text-slate-400 italic">None assigned</span>
+                    ) : (
+                      <div className="flex flex-wrap gap-1">
+                        {u.assignedLabs.slice(0, 4).map(l => (
+                          <span key={l} className="bg-sky-50 text-sky-700 border border-sky-200 text-[11px] font-semibold px-1.5 py-0.5 rounded">
+                            {l}
+                          </span>
+                        ))}
+                        {u.assignedLabs.length > 4 && (
+                          <span className="text-xs text-slate-400">+{u.assignedLabs.length - 4} more</span>
+                        )}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <button
+                        onClick={() => setAssignUser(u)}
+                        className="px-2.5 py-1 text-xs font-medium text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-md transition-colors"
+                        title="Assign labs"
+                      >
+                        <FiBox size={12} className="inline mr-1" />Assign Labs
+                      </button>
+                      <button
+                        onClick={() => handleDelete(u.id)}
+                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                        title="Delete user"
+                      >
+                        <FiTrash2 size={14} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 };

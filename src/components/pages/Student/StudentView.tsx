@@ -1,11 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiSearch, FiMonitor, FiArrowRight, FiBox } from 'react-icons/fi';
+import { FiSearch, FiMonitor, FiArrowRight, FiBox, FiLogOut } from 'react-icons/fi';
 import { getAllLabs, buildDemoPCs } from '../../../utils/labData';
+import { useAuth } from '../../../context/AuthContext';
 
 const StudentView: React.FC = () => {
   const [query, setQuery] = useState('');
   const navigate = useNavigate();
+  const { logout } = useAuth();
   const labs = useMemo(() => getAllLabs(), []);
 
   const filtered = useMemo(() => {
@@ -27,6 +29,13 @@ const StudentView: React.FC = () => {
           <FiBox size={15} className="text-white" />
         </div>
         <span className="font-semibold text-slate-800 text-sm tracking-tight">Lab Management — Student View</span>
+        <button
+          onClick={logout}
+          className="ml-auto flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-800 border border-slate-200 hover:border-slate-300 px-3 py-1.5 rounded-lg transition-colors"
+        >
+          <FiLogOut size={13} />
+          Back to Login
+        </button>
       </header>
 
       <main className="max-w-5xl mx-auto px-4 py-10">
