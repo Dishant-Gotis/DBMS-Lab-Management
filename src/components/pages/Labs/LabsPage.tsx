@@ -1,68 +1,10 @@
-﻿import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Card } from '../../common/Card';
 import { SearchBar } from '../../common/SearchBar';
 import { Modal } from '../../common/Modal';
 import { Button } from '../../common/Button';
 import { useAuth } from '../../../context/AuthContext';
-
-type DemoLab = {
-  id: string;
-  labNo: string;
-  name: string;
-  capacity: number;
-  description: string;
-};
-
-type DemoPC = {
-  id: string;
-  pcNo: string;
-  os: string;
-  processor: string;
-  ram: string;
-  storage: string;
-  gpu: string;
-  status: 'active' | 'inactive' | 'maintenance';
-};
-
-const buildLabIds = (): string[] => {
-  const blocks = ['61', '62', '63', '64', '65'];
-  const ids: string[] = [];
-
-  blocks.forEach(block => {
-    for (let i = 1; i <= 12; i += 1) {
-      ids.push(`${block}${String(i).padStart(2, '0')}`);
-    }
-  });
-
-  return ids;
-};
-
-const demoSpecSet = [
-  { os: 'Windows 11 Pro', processor: 'Intel Core i7-12700', ram: '16GB DDR4', storage: '512GB NVMe SSD', gpu: 'Intel UHD 770' },
-  { os: 'Ubuntu 22.04 LTS', processor: 'AMD Ryzen 7 5800X', ram: '32GB DDR4', storage: '1TB NVMe SSD', gpu: 'NVIDIA RTX 3060' },
-  { os: 'Windows 10 Pro', processor: 'Intel Core i5-12400', ram: '16GB DDR4', storage: '512GB SSD', gpu: 'Intel UHD 730' },
-];
-
-const buildDemoPCs = (labNo: string): DemoPC[] => {
-  const pcs: DemoPC[] = [];
-  const statusPool: DemoPC['status'][] = ['active', 'active', 'active', 'maintenance', 'inactive'];
-
-  for (let i = 1; i <= 15; i += 1) {
-    const spec = demoSpecSet[(i - 1) % demoSpecSet.length];
-    pcs.push({
-      id: `${labNo}-pc-${i}`,
-      pcNo: `${labNo}-PC-${String(i).padStart(2, '0')}`,
-      os: spec.os,
-      processor: spec.processor,
-      ram: spec.ram,
-      storage: spec.storage,
-      gpu: spec.gpu,
-      status: statusPool[(i - 1) % statusPool.length],
-    });
-  }
-
-  return pcs;
-};
+import { type DemoLab, type DemoPC, getAllLabs, buildDemoPCs } from '../../../utils/labData';
 
 const LabsPage: React.FC = () => {
   const { role, user } = useAuth();
@@ -81,15 +23,7 @@ const LabsPage: React.FC = () => {
     status: 'active',
   });
 
-  const allLabs = useMemo<DemoLab[]>(() => {
-    return buildLabIds().map((labNo, idx) => ({
-      id: `lab-${labNo}`,
-      labNo,
-      name: `Computer Lab ${labNo}`,
-      capacity: 30 + (idx % 4) * 5,
-      description: `Specialized practical lab for batch ${labNo.slice(0, 2)} with modern systems.`,
-    }));
-  }, []);
+  const allLabs = useMemo<DemoLab[]>(() => getAllLabs(), []);
 
   // STRICT ROLE-BASED ACCESS: Lab assistants only see their assigned labs
   const accessibleLabs = useMemo(() => {

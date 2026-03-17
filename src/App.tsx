@@ -11,6 +11,8 @@ import ClassesPage from './components/pages/Classes/ClassesPage';
 import FacultyPage from './components/pages/Faculty/FacultyPage';
 import SettingsPage from './components/pages/Settings/SettingsPage';
 import AdminDashboard from './components/pages/Admin/AdminDashboard';
+import StudentView from './components/pages/Student/StudentView';
+import StudentLabDetail from './components/pages/Student/StudentLabDetail';
 import AnimatedLoginPage from './components/ui/animated-characters-login-page';
 import './App.css';
 
@@ -27,10 +29,25 @@ const AppShell: React.FC = () => {
     }
   };
 
+  // Not authenticated → show login/selector screen
   if (!isAuthenticated) {
     return <AnimatedLoginPage onLoginSuccess={handleLoginSuccess} />;
   }
 
+  // Student role → dedicated student UI (no MainLayout)
+  if (role === 'student') {
+    return (
+      <Router>
+        <Routes>
+          <Route path="/" element={<StudentView />} />
+          <Route path="/lab/:labNo" element={<StudentLabDetail />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Router>
+    );
+  }
+
+  // Staff / Admin → full layout with sidebar
   return (
     <Router>
       <MainLayout>
