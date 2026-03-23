@@ -38,7 +38,21 @@ function saveSession(user: AuthUser, authenticated: boolean) {
 function loadSession(): { user: AuthUser; authenticated: boolean } {
   try {
     const raw = sessionStorage.getItem(SESSION_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed.user?.id) {
+        // Sanitize legacy string IDs from old sessions
+        parsed.user.id = parsed.user.id.replace(/^user-/, '');
+        
+        // Prevent Postgres integer overflow crashes (max 32-bit int is 2,147,483,647)
+        if (!isNaN(Number(parsed.user.id)) && Number(parsed.user.id) > 2147483647) {
+          console.warn('Scrubbing out-of-bounds legacy ID to prevent 500 API errors.');
+          sessionStorage.removeItem(SESSION_KEY);
+          return { user: GUEST, authenticated: false };
+        }
+      }
+      return parsed;
+    }
   } catch {}
   return { user: GUEST, authenticated: false };
 }

@@ -8,6 +8,7 @@ import ClassesPage from './components/pages/Classes/ClassesPage';
 import FacultyPage from './components/pages/Faculty/FacultyPage';
 import SettingsPage from './components/pages/Settings/SettingsPage';
 import AdminDashboard from './components/pages/Admin/AdminDashboard';
+import AdminLabsPage from './components/pages/Admin/AdminLabsPage';
 import StudentView from './components/pages/Student/StudentView';
 import StudentLabDetail from './components/pages/Student/StudentLabDetail';
 import LoginPage from './components/ui/animated-characters-login-page';
@@ -47,6 +48,7 @@ const AppShell: React.FC = () => {
       <Routes>
         {role === 'admin' && <Route path="/" element={<AdminDashboard />} />}
         {role === 'admin' && <Route path="/admin" element={<AdminDashboard />} />}
+        {role === 'admin' && <Route path="/admin/labs" element={<AdminLabsPage />} />}
         {role !== 'admin' && <Route path="/" element={<Navigate to="/labs" replace />} />}
         <Route path="/labs"      element={<LabsPage />} />
         <Route path="/timetable" element={<TimetablePage />} />

@@ -36,7 +36,13 @@ def _require_faculty_role():
 def _faculty_id_from_request() -> str | None:
     # TODO: Replace this with JWT-based identity extraction.
     faculty_id = request.headers.get("X-Faculty-Id") or request.args.get("facultyId")
-    return faculty_id.strip() if faculty_id else None
+    if not faculty_id:
+        return None
+    faculty_id = faculty_id.strip()
+    # Handle legacy frontend string IDs to prevent DB casting crashes
+    if faculty_id.startswith("user-"):
+        faculty_id = faculty_id.replace("user-", "")
+    return faculty_id
 
 
 def _fetch_slots_map(cur, slot_ids: list[int]) -> dict[int, dict]:
@@ -84,6 +90,14 @@ def get_faculty_labs(college: str):
             400,
         )
 
+    # Protect Postgres from out-of-bounds integer crashes caused by legacy frontend IDs
+    try:
+        faculty_id_int = int(faculty_id)
+        if faculty_id_int > 2147483647 or faculty_id_int < -2147483648:
+            return jsonify({"success": True, "data": [], "total": 0, "page": 1, "pageSize": 50}), 200
+    except ValueError:
+        return jsonify({"success": False, "error": "Invalid faculty ID format", "statusCode": 400}), 400
+
     conn = None
     try:
         conn = get_db_connection()
@@ -107,8 +121,11 @@ def get_faculty_labs(college: str):
                     l.id,
                     CAST(l.id AS TEXT) AS "labNo",
                     COALESCE(l.name, CONCAT('Computer Lab ', l.id::TEXT)) AS name,
-                    l.floor
+                    l.floor,
+                    a.id AS "assignedAssistantId",
+                    a.name AS "assignedAssistantName"
                 FROM labs l
+                LEFT JOIN assistants a ON a.lab_id = l.id
                 JOIN timetable t ON t.lab_id = l.id
                                 WHERE l.college_id = %s
                                     AND EXISTS (
@@ -133,6 +150,8 @@ def get_faculty_labs(college: str):
         # TODO: Add query pagination once frontend starts requesting pages.
         return jsonify({"success": True, "data": rows}), 200
     except Exception as exc:
+        import traceback
+        traceback.print_exc()
         return (
             jsonify(
                 {
@@ -167,6 +186,15 @@ def get_faculty_lab_timetable(college: str, lab_id: int):
             ),
             400,
         )
+
+    # Protect Postgres from out-of-bounds integer crashes caused by legacy frontend IDs
+    # If the ID is invalid for the DB, the faculty definitively does not have slots in this lab
+    try:
+        faculty_id_int = int(faculty_id)
+        if faculty_id_int > 2147483647 or faculty_id_int < -2147483648:
+            return jsonify({"success": False, "error": "Faculty has no assigned session in this lab", "statusCode": 403}), 403
+    except ValueError:
+        return jsonify({"success": False, "error": "Invalid faculty ID format", "statusCode": 400}), 400
 
     conn = None
     try:

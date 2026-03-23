@@ -25,8 +25,15 @@ CREATE TABLE pcs (
     id SERIAL PRIMARY KEY,
     password VARCHAR(255) NOT NULL,
     os_id INT NOT NULL,
+    lab_id INT NOT NULL,
+    pc_no VARCHAR(50),
+    status VARCHAR(50) DEFAULT 'active',
+    processor VARCHAR(100),
+    ram VARCHAR(50),
+    storage VARCHAR(50),
 
-    FOREIGN KEY (os_id) REFERENCES os(id)
+    FOREIGN KEY (os_id) REFERENCES os(id),
+    FOREIGN KEY (lab_id) REFERENCES labs(id)
 );
 
 CREATE TABLE assistants (

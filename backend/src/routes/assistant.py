@@ -36,7 +36,12 @@ def _require_assistant_role():
 def _assistant_id_from_request() -> str | None:
     # TODO: Replace this with JWT-based identity extraction.
     assistant_id = request.headers.get("X-Assistant-Id") or request.args.get("assistantId")
-    return assistant_id.strip() if assistant_id else None
+    if not assistant_id:
+        return None
+    assistant_id = assistant_id.strip()
+    if assistant_id.startswith("user-"):
+        assistant_id = assistant_id.replace("user-", "")
+    return assistant_id
 
 
 def _fetch_slots_map(cur, slot_ids: list[int]) -> dict[int, dict]:
@@ -84,6 +89,14 @@ def get_assistant_labs(college: str):
             ),
             400,
         )
+
+    # Protect Postgres from out-of-bounds integer crashes caused by legacy frontend IDs
+    try:
+        assistant_id_int = int(assistant_id)
+        if assistant_id_int > 2147483647 or assistant_id_int < -2147483648:
+            return jsonify({"success": True, "data": [], "total": 0, "page": 1, "pageSize": 50}), 200
+    except ValueError:
+        return jsonify({"success": False, "error": "Invalid assistant ID format", "statusCode": 400}), 400
 
     conn = None
     try:
@@ -155,6 +168,15 @@ def get_assistant_lab_timetable(college: str, lab_id: int):
             ),
             400,
         )
+
+    # Protect Postgres from out-of-bounds integer crashes caused by legacy frontend IDs
+    # If the ID is invalid for the DB, the assistant definitively does not own this lab
+    try:
+        assistant_id_int = int(assistant_id)
+        if assistant_id_int > 2147483647 or assistant_id_int < -2147483648:
+            return jsonify({"success": False, "error": "Assistant is not assigned to this lab", "statusCode": 403}), 403
+    except ValueError:
+        return jsonify({"success": False, "error": "Invalid assistant ID format", "statusCode": 400}), 400
 
     conn = None
     try:

@@ -16,7 +16,7 @@ export interface AppUser {
 const STORE_KEY = 'lms_users';
 
 const DEFAULT_ADMIN: AppUser = {
-  id: '1', // purely numeric
+  id: 'admin-001',
   name: 'Admin',
   email: 'admin@pccoepune.org',
   password: 'admin123',
@@ -28,21 +28,9 @@ const DEFAULT_ADMIN: AppUser = {
 function loadUsers(): AppUser[] {
   try {
     const raw = localStorage.getItem(STORE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as AppUser[];
-      // Sanitize old data to prevent PostgreSQL integer cast crashes
-      const validUsers = parsed
-        .map(u => ({ ...u, id: u.id.replace(/^user-/, '') }))
-        .filter(u => {
-           const numId = Number(u.id);
-           // Drop users with IDs larger than Postgres 32-bit INT max
-           return !isNaN(numId) && numId <= 2147483647;
-        });
-        
-      if (validUsers.length > 0) return validUsers;
-    }
+    if (raw) return JSON.parse(raw) as AppUser[];
   } catch {}
-  // First run (or all users dropped) — seed with just the admin account
+  // First run — seed with just the admin account
   const initial = [DEFAULT_ADMIN];
   localStorage.setItem(STORE_KEY, JSON.stringify(initial));
   return initial;
@@ -76,12 +64,9 @@ export const userStore = {
 
   add(user: Omit<AppUser, 'id' | 'createdAt'>): AppUser {
     const users = loadUsers();
-    // Generate a simple numeric string ID (6 digits max) so Postgres can parse it
-    // within the standard 32-bit integer bounds (max 2,147,483,647).
-    const newId = String(Math.floor(Math.random() * 900000) + 100000);
     const newUser: AppUser = {
       ...user,
-      id: newId,
+      id: `user-${Date.now()}`,
       createdAt: new Date().toISOString(),
     };
     saveUsers([...users, newUser]);

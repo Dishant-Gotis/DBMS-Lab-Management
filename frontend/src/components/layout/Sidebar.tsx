@@ -23,6 +23,7 @@ type NavItem = { id: string; label: string; path: string };
 const NAV_BY_ROLE: Record<string, NavItem[]> = {
   admin: [
     { id: 'admin',    label: 'Admin Dashboard', path: '/admin' },
+    { id: 'labs',     label: 'Labs',            path: '/admin/labs' },
     { id: 'settings', label: 'Settings',        path: '/settings' },
   ],
   faculty: [
