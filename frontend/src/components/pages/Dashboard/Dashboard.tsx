@@ -25,9 +25,6 @@ const Dashboard: React.FC = () => {
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
-  // Count PCs from labs (each lab card doesn't give PC count here, so show lab count prominently)
-  const totalPCs = labs.reduce((sum, l) => sum + (l.pcCount ?? 0), 0);
-
   const stats = [
     { label: 'Labs', value: loading ? '…' : labs.length, icon: <FiBox size={17} />, color: 'text-indigo-500' },
     { label: 'Faculty', value: loading ? '…' : (facultyCount ?? 0), icon: <FiUsers size={17} />, color: 'text-violet-500' },
