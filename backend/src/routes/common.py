@@ -1,7 +1,7 @@
-from psycopg2.extensions import cursor
+from typing import Any
 
 
-def resolve_college(cur: cursor, college: str):
+def resolve_college(cur: Any, college: str):
     college_value = college.strip()
     if not college_value:
         return None

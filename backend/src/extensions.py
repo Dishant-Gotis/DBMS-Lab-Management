@@ -1,13 +1,21 @@
 import os
 
-import psycopg2
-from psycopg2.extras import RealDictCursor
+try:
+	import psycopg2
+	from psycopg2.extras import RealDictCursor
+	_USE_PSYCOPG2 = True
+except ModuleNotFoundError:
+	import psycopg
+	from psycopg.rows import dict_row
+	_USE_PSYCOPG2 = False
 
 
 def get_db_connection():
 	database_url = os.getenv("DATABASE_URL")
 	if database_url:
-		return psycopg2.connect(database_url)
+		if _USE_PSYCOPG2:
+			return psycopg2.connect(database_url)
+		return psycopg.connect(database_url)
 
 	db_host = os.getenv("DB_HOST", "localhost")
 	db_port = os.getenv("DB_PORT", "5432")
@@ -20,7 +28,16 @@ def get_db_connection():
 			"Database configuration missing. Set DATABASE_URL or DB_NAME/DB_USER/DB_PASSWORD in .env"
 		)
 
-	return psycopg2.connect(
+	if _USE_PSYCOPG2:
+		return psycopg2.connect(
+			host=db_host,
+			port=db_port,
+			dbname=db_name,
+			user=db_user,
+			password=db_password,
+		)
+
+	return psycopg.connect(
 		host=db_host,
 		port=db_port,
 		dbname=db_name,
@@ -30,4 +47,6 @@ def get_db_connection():
 
 
 def get_dict_cursor(connection):
-	return connection.cursor(cursor_factory=RealDictCursor)
+	if _USE_PSYCOPG2:
+		return connection.cursor(cursor_factory=RealDictCursor)
+	return connection.cursor(row_factory=dict_row)
