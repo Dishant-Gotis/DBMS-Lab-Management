@@ -3,7 +3,7 @@ import Component from '@/components/ui/animated-characters-login-page';
 export default function DemoOne() {
   return (
     <Component
-      onLoginSuccess={() => ({ success: true })}
+      onLoginSuccess={async () => ({ success: true })}
       onStudentAccess={() => {}}
     />
   );

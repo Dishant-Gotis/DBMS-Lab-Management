@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { FiShield, FiUsers, FiTool, FiMonitor, FiArrowLeft, FiEye, FiEyeOff } from 'react-icons/fi';
+import { LoginRole } from '../../services/api';
 
 type UserRole = 'student' | 'labAssistant' | 'faculty' | 'admin';
 
 interface LoginPageProps {
-  onLoginSuccess: (email: string, password: string, role: UserRole) => { success: boolean; error?: string };
+  onLoginSuccess: (email: string, password: string, role: LoginRole) => Promise<{ success: boolean; error?: string }>;
   onStudentAccess: () => void;
 }
 
@@ -45,7 +46,7 @@ export default function LoginPage({ onLoginSuccess, onStudentAccess }: LoginPage
     setLoading(true);
     // small artificial delay for UX
     await new Promise(r => setTimeout(r, 300));
-    const result = onLoginSuccess(email.trim(), password, role);
+    const result = await onLoginSuccess(email.trim(), password, role);
     setLoading(false);
     if (!result.success) setError(result.error ?? 'Invalid credentials.');
   };

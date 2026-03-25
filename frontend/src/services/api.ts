@@ -10,6 +10,21 @@
 const BASE = '/api';
 export const COLLEGE = '1'; // default college for all requests
 
+export type LoginRole = 'admin' | 'faculty' | 'labAssistant';
+
+export interface ApiLoginUser {
+  id: string;
+  name: string;
+  email: string;
+  role: LoginRole;
+  assignedLabs: string[];
+}
+
+interface ApiLoginResponse {
+  success: boolean;
+  data: ApiLoginUser;
+}
+
 // ── Response shapes from the backend ──────────────────────────────────────────
 
 export interface ApiLab {
@@ -92,6 +107,202 @@ export interface ApiFaculty {
   phone: string;
 }
 
+export interface ApiClass {
+  id: number;
+  division: string;
+  year: number;
+  floor: number;
+  strength: number;
+  name: string;
+}
+
+export interface ApiCourse {
+  id: number;
+  name: string;
+  durationWeeks: number;
+  credits: number;
+}
+
+export interface ApiFacultyCatalogRow {
+  id: number;
+  name: string;
+  email: string;
+  phone: string;
+  department: string;
+  coursesCount: number;
+}
+
+export interface ApiPcCatalogRow {
+  id: number;
+  pcNo: string;
+  labId: number;
+  labName: string;
+  os: string;
+  processor: string;
+  ram: string;
+  storage: string;
+  status: 'active' | 'inactive' | 'maintenance';
+}
+
+export interface ApiSoftwareCatalogRow {
+  id: number;
+  name: string;
+  version: string;
+  category: string;
+  installDate: string;
+  pcId: number;
+  pcNo: string;
+  labId: number;
+  labName: string;
+}
+
+export interface ApiTimetableEntry {
+  id: string;
+  dayOfWeek: string;
+  startTime: string;
+  endTime: string;
+  labId: string;
+  labNo: string;
+  labName: string;
+  classId: string;
+  className: string | null;
+  courseId: string;
+  courseName: string | null;
+  facultyId: string;
+  facultyName: string | null;
+}
+
+export interface ApiTimetableMeta {
+  labs: Array<{ id: number; labNo: string; name: string; floor: number }>;
+  classes: Array<{ id: string; name: string | null; division: string | null; year: number | null }>;
+  courses: Array<{ id: string; name: string | null; durationWeeks: number | null; credits: number | null }>;
+  faculty: Array<{ id: string; name: string | null }>;
+}
+
+export interface ApiRoleTimetableResponse {
+  success: boolean;
+  data: {
+    lab: {
+      id: number;
+      labNo: string;
+      name: string;
+      floor: number;
+    };
+    timetable: {
+      mon: ApiRoleSlot | null;
+      tue: ApiRoleSlot | null;
+      wed: ApiRoleSlot | null;
+      thur: ApiRoleSlot | null;
+      fri: ApiRoleSlot | null;
+    };
+  };
+}
+
+export interface ApiRoleSlot {
+  id: number;
+  courseId: number;
+  courseName: string;
+  facultyId: number;
+  facultyName: string;
+  classId: number;
+  classDivision: string;
+  classYear: number;
+}
+
+export interface ApiAdminTimetableMeta {
+  labs: Array<{ id: number; labNo: string; name: string; floor: number }>;
+  classes: Array<{ id: string; name: string }>;
+  courses: Array<{ id: string; name: string }>;
+  faculty: Array<{ id: string; name: string }>;
+}
+
+interface ApiTimetableResponse {
+  success: boolean;
+  data: {
+    entries: ApiTimetableEntry[];
+    meta: ApiTimetableMeta;
+  };
+}
+
+export async function fetchTimetable(college: string = COLLEGE): Promise<ApiTimetableResponse['data']> {
+  const data = await apiFetch<ApiTimetableResponse>(`/${college}/timetable`);
+  return data.data;
+}
+
+export async function fetchAssistantLabTimetable(
+  assistantId: string,
+  labId: number,
+  college: string = COLLEGE,
+): Promise<ApiRoleTimetableResponse['data']> {
+  const data = await apiFetch<ApiRoleTimetableResponse>(`/${college}/assistant/labs/${labId}`, {
+    headers: {
+      'X-Role': 'assistant',
+      'X-Assistant-Id': assistantId,
+    },
+  });
+  return data.data;
+}
+
+export async function fetchFacultyLabTimetable(
+  facultyId: string,
+  labId: number,
+  college: string = COLLEGE,
+): Promise<ApiRoleTimetableResponse['data']> {
+  const data = await apiFetch<ApiRoleTimetableResponse>(`/${college}/faculty/labs/${labId}`, {
+    headers: {
+      'X-Role': 'faculty',
+      'X-Faculty-Id': facultyId,
+    },
+  });
+  return data.data;
+}
+
+export async function fetchAdminTimetableMeta(college: string = COLLEGE): Promise<ApiAdminTimetableMeta> {
+  const data = await apiFetch<{ success: boolean; data: ApiAdminTimetableMeta }>(`/${college}/admin/timetable/meta`, {
+    headers: { 'X-Role': 'admin' },
+  });
+  return data.data;
+}
+
+export async function createAdminSlot(
+  courseId: number,
+  facultyId: number,
+  classId: number,
+  college: string = COLLEGE,
+): Promise<{ id: number; course_id: number; faculty_id: number; class_id: number }> {
+  const data = await apiFetch<any>(`/${college}/admin/timetable/slots`, {
+    method: 'POST',
+    headers: { 'X-Role': 'admin', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ course_id: courseId, faculty_id: facultyId, class_id: classId }),
+  });
+  return data.data;
+}
+
+export async function updateAdminTimetableDay(
+  labId: number,
+  day: 'mon' | 'tue' | 'wed' | 'thur' | 'fri',
+  slotId: number | null,
+  college: string = COLLEGE,
+): Promise<void> {
+  await apiFetch<any>(`/${college}/admin/timetable/${labId}`, {
+    method: 'PUT',
+    headers: { 'X-Role': 'admin', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ day, slot_id: slotId }),
+  });
+}
+
+export async function loginUser(
+  email: string,
+  password: string,
+  role: LoginRole,
+): Promise<ApiLoginUser> {
+  const data = await apiFetch<ApiLoginResponse>('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password, role }),
+  });
+  return data.data;
+}
+
 // ── Generic fetch helper ───────────────────────────────────────────────────────
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
@@ -117,6 +328,31 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   }
 
   return json as T;
+}
+
+export async function fetchClasses(college: string = COLLEGE): Promise<ApiClass[]> {
+  const data = await apiFetch<{ success: boolean; data: ApiClass[] }>(`/${college}/classes`);
+  return data.data;
+}
+
+export async function fetchCourses(college: string = COLLEGE): Promise<ApiCourse[]> {
+  const data = await apiFetch<{ success: boolean; data: ApiCourse[] }>(`/${college}/courses`);
+  return data.data;
+}
+
+export async function fetchFacultyCatalog(college: string = COLLEGE): Promise<ApiFacultyCatalogRow[]> {
+  const data = await apiFetch<{ success: boolean; data: ApiFacultyCatalogRow[] }>(`/${college}/faculty`);
+  return data.data;
+}
+
+export async function fetchPcsCatalog(college: string = COLLEGE): Promise<ApiPcCatalogRow[]> {
+  const data = await apiFetch<{ success: boolean; data: ApiPcCatalogRow[] }>(`/${college}/pcs`);
+  return data.data;
+}
+
+export async function fetchSoftwareCatalog(college: string = COLLEGE): Promise<ApiSoftwareCatalogRow[]> {
+  const data = await apiFetch<{ success: boolean; data: ApiSoftwareCatalogRow[] }>(`/${college}/software`);
+  return data.data;
 }
 
 // ── Public API helpers ─────────────────────────────────────────────────────────

@@ -1,33 +1,33 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Card } from '../../common/Card';
 import { Table } from '../../common/Table';
 import { SearchBar } from '../../common/SearchBar';
-import { useSoftware } from '../../../hooks';
-import { mockData } from '../../../mockData';
-import { Software } from '../../../types';
 import { TableColumn } from '../../../types';
+import { fetchSoftwareCatalog, type ApiSoftwareCatalogRow } from '../../../services/api';
+
+type SoftwareRow = ApiSoftwareCatalogRow;
 
 const SoftwarePage: React.FC = () => {
-  const { software } = useSoftware();
-  const [filteredSoftware, setFilteredSoftware] = useState(software);
+  const [software, setSoftware] = useState<SoftwareRow[]>([]);
+  const [query, setQuery] = useState('');
 
-  const handleSearch = (query: string) => {
-    if (query.trim() === '') {
-      setFilteredSoftware(software);
-    } else {
-      const lowerQuery = query.toLowerCase();
-      setFilteredSoftware(
-        software.filter(
-          soft =>
-            soft.name.toLowerCase().includes(lowerQuery) ||
-            soft.category.toLowerCase().includes(lowerQuery) ||
-            soft.version.toLowerCase().includes(lowerQuery)
-        )
-      );
-    }
-  };
+  useEffect(() => {
+    fetchSoftwareCatalog().then(setSoftware).catch(() => setSoftware([]));
+  }, []);
 
-  const columns: TableColumn<Software>[] = [
+  const filteredSoftware = useMemo(() => {
+    const q = query.toLowerCase().trim();
+    if (!q) return software;
+    return software.filter(
+      soft =>
+        soft.name.toLowerCase().includes(q) ||
+        soft.category.toLowerCase().includes(q) ||
+        soft.version.toLowerCase().includes(q) ||
+        soft.pcNo.toLowerCase().includes(q),
+    );
+  }, [software, query]);
+
+  const columns: TableColumn<SoftwareRow>[] = [
     { key: 'name', header: 'Software Name', width: '250px' },
     { key: 'version', header: 'Version', width: '120px' },
     { key: 'category', header: 'Category', width: '150px' },
@@ -38,13 +38,10 @@ const SoftwarePage: React.FC = () => {
       render: (value) => new Date(value).toLocaleDateString(),
     },
     {
-      key: 'id',
+      key: 'pcNo',
       header: 'Installed On',
       width: '200px',
-      render: (softId) => {
-        const pcsCount = mockData.pcs.filter(pc => pc.installedSoftware.includes(softId)).length;
-        return `${pcsCount} PC${pcsCount !== 1 ? 's' : ''}`;
-      },
+      render: (_, row) => `${row.pcNo} (${row.labName})`,
     },
   ];
 
@@ -57,8 +54,8 @@ const SoftwarePage: React.FC = () => {
 
       <Card>
         <div className="space-y-4">
-          <SearchBar onSearch={handleSearch} placeholder="Search by software name, category, or version..." />
-          <Table<Software>
+          <SearchBar onSearch={setQuery} placeholder="Search by software name, category, version, or PC..." />
+          <Table<SoftwareRow>
             data={filteredSoftware}
             columns={columns}
             onRowClick={(soft) => console.log('Clicked software:', soft)}

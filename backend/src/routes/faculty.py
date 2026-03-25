@@ -16,8 +16,6 @@ _DAY_COLUMN_MAP = {
 
 
 def _require_faculty_role():
-    # NOTE: Intentionally simple and insecure auth by request.
-    # TODO: Replace with JWT + RBAC middleware.
     role = request.headers.get("X-Role", "")
     if role != "faculty":
         return (
@@ -34,12 +32,10 @@ def _require_faculty_role():
 
 
 def _faculty_id_from_request() -> str | None:
-    # TODO: Replace this with JWT-based identity extraction.
     faculty_id = request.headers.get("X-Faculty-Id") or request.args.get("facultyId")
     if not faculty_id:
         return None
     faculty_id = faculty_id.strip()
-    # Handle legacy frontend string IDs to prevent DB casting crashes
     if faculty_id.startswith("user-"):
         faculty_id = faculty_id.replace("user-", "")
     return faculty_id
@@ -90,7 +86,6 @@ def get_faculty_labs(college: str):
             400,
         )
 
-    # Protect Postgres from out-of-bounds integer crashes caused by legacy frontend IDs
     try:
         faculty_id_int = int(faculty_id)
         if faculty_id_int > 2147483647 or faculty_id_int < -2147483648:
@@ -119,8 +114,8 @@ def get_faculty_labs(college: str):
                 """
                 SELECT DISTINCT
                     l.id,
-                    CAST(l.id AS TEXT) AS "labNo",
-                    COALESCE(l.name, CONCAT('Computer Lab ', l.id::TEXT)) AS name,
+                    l.id AS "labNo",
+                    l.name,
                     l.floor,
                     a.id AS "assignedAssistantId",
                     a.name AS "assignedAssistantName"
@@ -146,8 +141,10 @@ def get_faculty_labs(college: str):
                 (college_row["id"], faculty_id),
             )
             rows = cur.fetchall()
+            for row in rows:
+                row["labNo"] = str(row["labNo"])
+                row["name"] = row["name"] or f"Computer Lab {row['id']}"
 
-        # TODO: Add query pagination once frontend starts requesting pages.
         return jsonify({"success": True, "data": rows}), 200
     except Exception as exc:
         import traceback
@@ -187,8 +184,6 @@ def get_faculty_lab_timetable(college: str, lab_id: int):
             400,
         )
 
-    # Protect Postgres from out-of-bounds integer crashes caused by legacy frontend IDs
-    # If the ID is invalid for the DB, the faculty definitively does not have slots in this lab
     try:
         faculty_id_int = int(faculty_id)
         if faculty_id_int > 2147483647 or faculty_id_int < -2147483648:
@@ -217,8 +212,8 @@ def get_faculty_lab_timetable(college: str, lab_id: int):
                 """
                 SELECT
                     l.id,
-                    CAST(l.id AS TEXT) AS "labNo",
-                    COALESCE(l.name, CONCAT('Computer Lab ', l.id::TEXT)) AS name,
+                    l.id AS "labNo",
+                    l.name,
                     l.floor,
                     t.mon_slot_id,
                     t.tue_slot_id,
@@ -244,6 +239,9 @@ def get_faculty_lab_timetable(college: str, lab_id: int):
                     ),
                     404,
                 )
+
+            row["labNo"] = str(row["labNo"])
+            row["name"] = row["name"] or f"Computer Lab {row['id']}"
 
             slot_ids = [
                 row[_DAY_COLUMN_MAP[day]]

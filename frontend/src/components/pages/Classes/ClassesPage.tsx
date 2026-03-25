@@ -1,48 +1,41 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Card } from '../../common/Card';
 import { Table } from '../../common/Table';
 import { SearchBar } from '../../common/SearchBar';
-import { useClasses } from '../../../hooks';
-import { mockData } from '../../../mockData';
-import { Class } from '../../../types';
 import { TableColumn } from '../../../types';
+import { fetchClasses, type ApiClass } from '../../../services/api';
+
+type ClassRow = ApiClass;
 
 const ClassesPage: React.FC = () => {
-  const { classes } = useClasses();
-  const [filteredClasses, setFilteredClasses] = useState(classes);
+  const [classes, setClasses] = useState<ClassRow[]>([]);
+  const [query, setQuery] = useState('');
 
-  const handleSearch = (query: string) => {
-    if (query.trim() === '') {
-      setFilteredClasses(classes);
-    } else {
-      const lowerQuery = query.toLowerCase();
-      setFilteredClasses(
-        classes.filter(
-          cls =>
-            cls.name.toLowerCase().includes(lowerQuery) ||
-            mockData.courses
-              .find(c => c.id === cls.courseId)
-              ?.name.toLowerCase()
-              .includes(lowerQuery)
-        )
-      );
-    }
-  };
+  useEffect(() => {
+    fetchClasses().then(setClasses).catch(() => setClasses([]));
+  }, []);
 
-  const columns: TableColumn<Class>[] = [
-    { key: 'name', header: 'Class Name', width: '150px' },
+  const filteredClasses = useMemo(() => {
+    const q = query.toLowerCase().trim();
+    if (!q) return classes;
+    return classes.filter(
+      cls =>
+        String(cls.id).includes(q) ||
+        cls.division.toLowerCase().includes(q) ||
+        String(cls.year).includes(q) ||
+        String(cls.floor).includes(q),
+    );
+  }, [classes, query]);
+
+  const columns: TableColumn<ClassRow>[] = [
+    { key: 'id', header: 'Class ID', width: '130px' },
+    { key: 'division', header: 'Division', width: '130px' },
     {
-      key: 'courseId',
-      header: 'Course',
-      width: '250px',
-      render: (value) => mockData.courses.find(c => c.id === value)?.name || 'Unknown',
-    },
-    {
-      key: 'semester',
-      header: 'Semester',
+      key: 'year',
+      header: 'Year',
       width: '100px',
-      render: (value) => `Sem ${value}`,
     },
+    { key: 'floor', header: 'Floor', width: '100px' },
     {
       key: 'strength',
       header: 'Strength',
@@ -60,8 +53,8 @@ const ClassesPage: React.FC = () => {
 
       <Card>
         <div className="space-y-4">
-          <SearchBar onSearch={handleSearch} placeholder="Search by class name or course..." />
-          <Table<Class>
+          <SearchBar onSearch={setQuery} placeholder="Search by class id, year, floor, or division..." />
+          <Table<ClassRow>
             data={filteredClasses}
             columns={columns}
             onRowClick={(cls) => console.log('Clicked class:', cls)}
@@ -80,35 +73,34 @@ const ClassesPage: React.FC = () => {
           <p className="text-2xl font-semibold text-slate-900 mt-1">{classes.reduce((sum, c) => sum + c.strength, 0)}</p>
         </div>
         <div className="bg-white border border-slate-200 p-4 rounded-lg">
-          <p className="text-xs text-slate-500">Avg Class Size</p>
+          <p className="text-xs text-slate-500">Avg Class Strength</p>
           <p className="text-2xl font-semibold text-slate-900 mt-1">
-            {Math.round(classes.reduce((sum, c) => sum + c.strength, 0) / classes.length)}
+            {classes.length ? Math.round(classes.reduce((sum, c) => sum + c.strength, 0) / classes.length) : 0}
           </p>
         </div>
         <div className="bg-white border border-slate-200 p-4 rounded-lg">
-          <p className="text-xs text-slate-500">Total Courses</p>
+          <p className="text-xs text-slate-500">Floors Used</p>
           <p className="text-2xl font-semibold text-slate-900 mt-1">
-            {new Set(classes.map(c => c.courseId)).size}
+            {new Set(classes.map(c => c.floor)).size}
           </p>
         </div>
       </div>
 
-      <Card title="Classes by Course">
+      <Card title="Classes by Year">
         <div className="space-y-2">
-          {Array.from(new Set(classes.map(c => c.courseId))).map(courseId => {
-            const course = mockData.courses.find(c => c.id === courseId);
-            const courseClasses = classes.filter(c => c.courseId === courseId);
+          {Array.from(new Set(classes.map(c => c.year))).sort().map(year => {
+            const yearClasses = classes.filter(c => c.year === year);
             return (
               <div
-                key={courseId}
+                key={year}
                 className="flex items-center justify-between p-3 bg-slate-50 rounded-md border border-slate-100 hover:bg-slate-100/70 transition-colors"
               >
                 <div>
-                  <p className="font-medium text-slate-800">{course?.name}</p>
-                  <p className="text-sm text-slate-500">{courseClasses.length} class section(s)</p>
+                  <p className="font-medium text-slate-800">Year {year}</p>
+                  <p className="text-sm text-slate-500">{yearClasses.length} class section(s)</p>
                 </div>
                 <span className="text-xs bg-sky-100 text-sky-700 px-2.5 py-1 rounded-full font-semibold">
-                  {courseClasses.reduce((sum, c) => sum + c.strength, 0)} students
+                  {yearClasses.reduce((sum, c) => sum + c.strength, 0)} students
                 </span>
               </div>
             );

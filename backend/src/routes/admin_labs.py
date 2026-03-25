@@ -40,10 +40,9 @@ def create_admin_lab(college: str):
                 (college_row["id"], floor, name)
             )
             row = cur.fetchone()
-            
-            # Add assignedAssistantName (null since it's just created) for frontend compliance
+
             row["assignedAssistantName"] = None
-            
+
         conn.commit()
         return jsonify({"success": True, "data": row, "message": "Lab created successfully"}), 201
     except Exception as exc:
@@ -68,7 +67,6 @@ def get_admin_lab_pcs(college: str, lab_id: int):
             if not college_row:
                 return jsonify({"success": False, "error": "College not found", "statusCode": 404}), 404
 
-            # Verify lab belongs to college
             cur.execute("SELECT id FROM labs WHERE id = %s AND college_id = %s", (lab_id, college_row["id"]))
             if not cur.fetchone():
                 return jsonify({"success": False, "error": "Lab not found", "statusCode": 404}), 404
@@ -109,8 +107,7 @@ def get_admin_lab_pcs(college: str, lab_id: int):
                     (pc_ids,),
                 )
                 softwares = cur.fetchall()
-                
-                # Attach software to PCs
+
                 for pc in pcs_dict.values():
                     pc["softwares"] = []
                 for sw in softwares:
@@ -157,7 +154,7 @@ def create_admin_lab_pc(college: str, lab_id: int):
             )
             row = cur.fetchone()
         conn.commit()
-        
+
         row["softwares"] = [] # Return empty array for convenience
         return jsonify({"success": True, "data": row, "message": "PC added to lab"}), 201
     except Exception as exc:
@@ -215,7 +212,6 @@ def delete_admin_lab(college: str, lab_id: int):
     try:
         conn = get_db_connection()
         with get_dict_cursor(conn) as cur:
-            # Manually cascade delete: Software -> PCs -> Lab
             cur.execute("DELETE FROM software WHERE pc_id IN (SELECT id FROM pcs WHERE lab_id = %s)", (lab_id,))
             cur.execute("DELETE FROM pcs WHERE lab_id = %s", (lab_id,))
             cur.execute("DELETE FROM labs WHERE id = %s RETURNING id", (lab_id,))

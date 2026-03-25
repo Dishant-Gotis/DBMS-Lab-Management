@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { userStore, type AppUser, type AppRole } from '../store/userStore';
+import { loginUser, type LoginRole } from '../services/api';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 export interface AuthUser {
@@ -14,7 +15,7 @@ interface AuthContextType {
   user: AuthUser;
   role: AppRole | 'student';
   isAuthenticated: boolean;
-  loginWithCredentials: (email: string, password: string) => { success: boolean; error?: string };
+  loginWithCredentials: (email: string, password: string, role: LoginRole) => Promise<{ success: boolean; error?: string }>;
   loginAsStudent: () => void;
   logout: () => void;
 }
@@ -67,17 +68,37 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [currentUser, setCurrentUser] = useState<AuthUser>(saved.user);
   const [isAuthenticated, setIsAuthenticated] = useState(saved.authenticated);
 
-  const loginWithCredentials = (email: string, password: string): { success: boolean; error?: string } => {
-    const found = userStore.validate(email, password);
-    if (!found) return { success: false, error: 'Invalid email or password.' };
+  const loginWithCredentials = async (email: string, password: string, role: LoginRole): Promise<{ success: boolean; error?: string }> => {
+    try {
+      if (role === 'admin') {
+        const found = userStore.validate(email, password);
+        if (!found || found.role !== 'admin') return { success: false, error: 'Invalid admin credentials.' };
 
-    // Re-read from store in case labs were assigned since last load
-    const fresh = userStore.findByEmail(email)!;
-    const authUser = appUserToAuthUser(fresh);
-    setCurrentUser(authUser);
-    setIsAuthenticated(true);
-    saveSession(authUser, true);
-    return { success: true };
+        const fresh = userStore.findByEmail(email)!;
+        const authUser = appUserToAuthUser(fresh);
+        setCurrentUser(authUser);
+        setIsAuthenticated(true);
+        saveSession(authUser, true);
+        return { success: true };
+      }
+
+      const remote = await loginUser(email, password, role);
+      const authUser: AuthUser = {
+        id: String(remote.id),
+        name: remote.name,
+        email: remote.email,
+        role: remote.role,
+        assignedLabs: remote.assignedLabs || [],
+      };
+
+      setCurrentUser(authUser);
+      setIsAuthenticated(true);
+      saveSession(authUser, true);
+      return { success: true };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Invalid email or password.';
+      return { success: false, error: msg };
+    }
   };
 
   const loginAsStudent = () => {

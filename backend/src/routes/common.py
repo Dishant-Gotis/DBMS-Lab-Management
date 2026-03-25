@@ -6,6 +6,8 @@ def resolve_college(cur: cursor, college: str):
     if not college_value:
         return None
 
+    normalized = " ".join(college_value.replace("-", " ").split())
+
     if college_value.isdigit():
         cur.execute(
             """
@@ -22,9 +24,9 @@ def resolve_college(cur: cursor, college: str):
         SELECT id, name, city, state, pincode
         FROM colleges
         WHERE lower(name) = lower(%s)
-           OR regexp_replace(lower(name), '[^a-z0-9]+', '-', 'g') = lower(%s)
+           OR lower(name) = lower(%s)
         LIMIT 1
         """,
-        (college_value, college_value),
+        (college_value, normalized),
     )
     return cur.fetchone()

@@ -22,6 +22,7 @@ def get_labs(college: str):
 
     offset = (page - 1) * page_size
     search_like = f"%{q}%"
+    id_search = int(q) if q.isdigit() else None
 
     conn = None
     try:
@@ -45,9 +46,13 @@ def get_labs(college: str):
                 SELECT COUNT(*) AS total
                 FROM labs l
                 WHERE l.college_id = %s
-                  AND (%s = '' OR CAST(l.id AS TEXT) ILIKE %s OR COALESCE(l.name, '') ILIKE %s)
+                                    AND (
+                                                %s = ''
+                                                OR (%s IS NOT NULL AND l.id = %s)
+                                                OR l.name ILIKE %s
+                                    )
                 """,
-                (college_row["id"], q, search_like, search_like),
+                                (college_row["id"], q, id_search, id_search, search_like),
             )
             total = cur.fetchone()["total"]
 
@@ -55,21 +60,28 @@ def get_labs(college: str):
                 """
                 SELECT
                     l.id,
-                    CAST(l.id AS TEXT) AS "labNo",
-                    COALESCE(l.name, CONCAT('Computer Lab ', l.id::TEXT)) AS name,
+                    l.id AS "labNo",
+                    l.name,
                     l.floor,
                     a.id AS "assignedAssistantId",
                     a.name AS "assignedAssistantName"
                 FROM labs l
                 LEFT JOIN assistants a ON a.lab_id = l.id
-                                WHERE l.college_id = %s
-                                    AND (%s = '' OR CAST(l.id AS TEXT) ILIKE %s OR COALESCE(l.name, '') ILIKE %s)
+                WHERE l.college_id = %s
+                  AND (
+                        %s = ''
+                        OR (%s IS NOT NULL AND l.id = %s)
+                        OR l.name ILIKE %s
+                  )
                 ORDER BY l.id
                 LIMIT %s OFFSET %s
                 """,
-                                (college_row["id"], q, search_like, search_like, page_size, offset),
+                (college_row["id"], q, id_search, id_search, search_like, page_size, offset),
             )
             rows = cur.fetchall()
+            for row in rows:
+                row["labNo"] = str(row["labNo"])
+                row["name"] = row["name"] or f"Computer Lab {row['id']}"
 
         return (
             jsonify(
@@ -123,8 +135,8 @@ def get_lab_by_id(college: str, lab_id: int):
                 """
                 SELECT
                     l.id,
-                    CAST(l.id AS TEXT) AS "labNo",
-                    COALESCE(l.name, CONCAT('Computer Lab ', l.id::TEXT)) AS name,
+                    l.id AS "labNo",
+                    l.name,
                     l.floor,
                     a.id AS "assignedAssistantId",
                     a.name AS "assignedAssistantName"
@@ -135,6 +147,10 @@ def get_lab_by_id(college: str, lab_id: int):
                 (lab_id, college_row["id"]),
             )
             lab = cur.fetchone()
+
+        if lab:
+            lab["labNo"] = str(lab["labNo"])
+            lab["name"] = lab["name"] or f"Computer Lab {lab['id']}"
 
         if not lab:
             return (
@@ -228,8 +244,6 @@ def get_pc_software_details(college: str, pc_id: int):
             )
             softwares = cur.fetchall()
 
-        # TODO: Enforce PC-to-college ownership once schema links PC to lab/college.
-        # TODO: Remove sensitive fields (password) once auth boundaries are finalized.
         return (
             jsonify(
                 {

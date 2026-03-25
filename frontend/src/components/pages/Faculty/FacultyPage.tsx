@@ -1,33 +1,32 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Card } from '../../common/Card';
 import { Table } from '../../common/Table';
 import { SearchBar } from '../../common/SearchBar';
-import { useFaculty } from '../../../hooks';
-import { mockData } from '../../../mockData';
-import { Faculty } from '../../../types';
 import { TableColumn } from '../../../types';
+import { fetchFacultyCatalog, type ApiFacultyCatalogRow } from '../../../services/api';
+
+type FacultyRow = ApiFacultyCatalogRow;
 
 const FacultyPage: React.FC = () => {
-  const { faculty } = useFaculty();
-  const [filteredFaculty, setFilteredFaculty] = useState(faculty);
+  const [faculty, setFaculty] = useState<FacultyRow[]>([]);
+  const [query, setQuery] = useState('');
 
-  const handleSearch = (query: string) => {
-    if (query.trim() === '') {
-      setFilteredFaculty(faculty);
-    } else {
-      const lowerQuery = query.toLowerCase();
-      setFilteredFaculty(
-        faculty.filter(
-          fac =>
-            fac.name.toLowerCase().includes(lowerQuery) ||
-            fac.email.toLowerCase().includes(lowerQuery) ||
-            fac.department.toLowerCase().includes(lowerQuery)
-        )
-      );
-    }
-  };
+  useEffect(() => {
+    fetchFacultyCatalog().then(setFaculty).catch(() => setFaculty([]));
+  }, []);
 
-  const columns: TableColumn<Faculty>[] = [
+  const filteredFaculty = useMemo(() => {
+    const q = query.toLowerCase().trim();
+    if (!q) return faculty;
+    return faculty.filter(
+      fac =>
+        fac.name.toLowerCase().includes(q) ||
+        fac.email.toLowerCase().includes(q) ||
+        fac.department.toLowerCase().includes(q),
+    );
+  }, [faculty, query]);
+
+  const columns: TableColumn<FacultyRow>[] = [
     { key: 'name', header: 'Name', width: '200px' },
     { key: 'email', header: 'Email', width: '250px' },
     { key: 'phone', header: 'Phone', width: '150px' },
@@ -36,10 +35,7 @@ const FacultyPage: React.FC = () => {
       key: 'id',
       header: 'Courses',
       width: '200px',
-      render: (facultyId) => {
-        const fac = faculty.find(f => f.id === facultyId);
-        return fac?.courses?.length || 0;
-      },
+      render: (_, row) => row.coursesCount,
     },
   ];
 
@@ -52,8 +48,8 @@ const FacultyPage: React.FC = () => {
 
       <Card>
         <div className="space-y-4">
-          <SearchBar onSearch={handleSearch} placeholder="Search by name, email, or department..." />
-          <Table<Faculty>
+          <SearchBar onSearch={setQuery} placeholder="Search by name, email, or department..." />
+          <Table<FacultyRow>
             data={filteredFaculty}
             columns={columns}
             onRowClick={(fac) => console.log('Clicked faculty:', fac)}
@@ -76,16 +72,13 @@ const FacultyPage: React.FC = () => {
         <div className="bg-white border border-slate-200 p-4 rounded-lg">
           <p className="text-xs text-slate-500">Total Courses</p>
           <p className="text-2xl font-semibold text-slate-900 mt-1">
-            {mockData.courses.length}
+            {faculty.reduce((sum, f) => sum + f.coursesCount, 0)}
           </p>
         </div>
         <div className="bg-white border border-slate-200 p-4 rounded-lg">
           <p className="text-xs text-slate-500">Avg Courses/Faculty</p>
           <p className="text-2xl font-semibold text-slate-900 mt-1">
-            {faculty.filter(f => f.courses).length > 0
-              ? (faculty.reduce((sum, f) => sum + (f.courses?.length || 0), 0) /
-                  faculty.filter(f => f.courses).length).toFixed(1)
-              : '0'}
+            {faculty.length > 0 ? (faculty.reduce((sum, f) => sum + f.coursesCount, 0) / faculty.length).toFixed(1) : '0'}
           </p>
         </div>
       </div>
@@ -104,7 +97,7 @@ const FacultyPage: React.FC = () => {
                   <p className="text-sm text-slate-500">{deptFaculty.length} faculty member(s)</p>
                 </div>
                 <span className="text-xs bg-sky-100 text-sky-700 px-2.5 py-1 rounded-full font-semibold">
-                  {deptFaculty.reduce((sum, f) => sum + (f.courses?.length || 0), 0)} courses
+                  {deptFaculty.reduce((sum, f) => sum + f.coursesCount, 0)} courses
                 </span>
               </div>
             );

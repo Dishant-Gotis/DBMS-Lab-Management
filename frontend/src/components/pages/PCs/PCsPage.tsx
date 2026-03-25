@@ -1,54 +1,47 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Card } from '../../common/Card';
 import { Table } from '../../common/Table';
 import { SearchBar } from '../../common/SearchBar';
-import { usePCs } from '../../../hooks';
-import { mockData } from '../../../mockData';
-import { PC } from '../../../types';
 import { TableColumn } from '../../../types';
 import { FiGrid, FiList } from 'react-icons/fi';
+import { fetchPcsCatalog, type ApiPcCatalogRow } from '../../../services/api';
+
+type PcRow = ApiPcCatalogRow;
 
 const PCsPage: React.FC = () => {
-  const { pcs } = usePCs();
-  const [filteredPCs, setFilteredPCs] = useState(pcs);
+  const [pcs, setPcs] = useState<PcRow[]>([]);
+  const [query, setQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
-  const handleSearch = (query: string) => {
-    if (query.trim() === '') {
-      setFilteredPCs(pcs);
-    } else {
-      const lowerQuery = query.toLowerCase();
-      setFilteredPCs(
-        pcs.filter(
-          pc =>
-            pc.pcNo.toLowerCase().includes(lowerQuery) ||
-            pc.os.toLowerCase().includes(lowerQuery) ||
-            pc.specs.processor.toLowerCase().includes(lowerQuery)
-        )
-      );
-    }
-  };
+  useEffect(() => {
+    fetchPcsCatalog().then(setPcs).catch(() => setPcs([]));
+  }, []);
 
-  const columns: TableColumn<PC>[] = [
+  const filteredPCs = useMemo(() => {
+    const q = query.toLowerCase().trim();
+    if (!q) return pcs;
+    return pcs.filter(
+      pc =>
+        pc.pcNo.toLowerCase().includes(q) ||
+        pc.os.toLowerCase().includes(q) ||
+        pc.processor.toLowerCase().includes(q) ||
+        pc.labName.toLowerCase().includes(q),
+    );
+  }, [pcs, query]);
+
+  const columns: TableColumn<PcRow>[] = [
     { key: 'pcNo', header: 'PC Number', width: '150px' },
-    {
-      key: 'labId',
-      header: 'Lab',
-      width: '200px',
-      render: (value) => mockData.labs.find(l => l.id === value)?.name || 'Unknown',
-    },
+    { key: 'labName', header: 'Lab', width: '200px' },
     { key: 'os', header: 'Operating System', width: '200px' },
     {
-      key: 'specs',
+      key: 'processor',
       header: 'Processor',
       width: '250px',
-      render: (_, row) => row.specs.processor,
     },
     {
-      key: 'specs',
+      key: 'ram',
       header: 'RAM',
       width: '100px',
-      render: (_, row) => row.specs.ram,
     },
     {
       key: 'status',
@@ -80,7 +73,7 @@ const PCsPage: React.FC = () => {
       <Card>
         <div className="space-y-4">
           <div className="flex justify-between items-center gap-4">
-            <SearchBar onSearch={handleSearch} placeholder="Search by PC number, OS, or processor..." />
+            <SearchBar onSearch={setQuery} placeholder="Search by PC number, lab, OS, or processor..." />
             <div className="flex gap-1 bg-slate-100 p-1 rounded-md border border-slate-200">
               <button
                 onClick={() => setViewMode('grid')}
@@ -106,7 +99,7 @@ const PCsPage: React.FC = () => {
           </div>
 
           {viewMode === 'list' ? (
-            <Table<PC> data={filteredPCs} columns={columns} rowsPerPage={10} />
+            <Table<PcRow> data={filteredPCs} columns={columns} rowsPerPage={10} />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredPCs.map(pc => (
@@ -116,9 +109,7 @@ const PCsPage: React.FC = () => {
                 >
                   <div className="mb-3">
                     <h3 className="font-semibold text-slate-900 tracking-tight">{pc.pcNo}</h3>
-                    <p className="text-sm text-slate-500">
-                      {mockData.labs.find(l => l.id === pc.labId)?.name}
-                    </p>
+                    <p className="text-sm text-slate-500">{pc.labName}</p>
                   </div>
                   <div className="space-y-2 text-sm">
                     <div>
@@ -127,16 +118,16 @@ const PCsPage: React.FC = () => {
                     </div>
                     <div>
                       <p className="text-slate-500">Processor</p>
-                      <p className="font-semibold text-slate-900 truncate">{pc.specs.processor}</p>
+                      <p className="font-semibold text-slate-900 truncate">{pc.processor}</p>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <p className="text-slate-500">RAM</p>
-                        <p className="font-semibold text-slate-900">{pc.specs.ram}</p>
+                        <p className="font-semibold text-slate-900">{pc.ram}</p>
                       </div>
                       <div>
                         <p className="text-slate-500">Storage</p>
-                        <p className="font-semibold text-slate-900">{pc.specs.storage}</p>
+                        <p className="font-semibold text-slate-900">{pc.storage}</p>
                       </div>
                     </div>
                   </div>

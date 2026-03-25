@@ -16,8 +16,6 @@ _DAY_COLUMN_MAP = {
 
 
 def _require_assistant_role():
-    # NOTE: Intentionally simple and insecure auth by request.
-    # TODO: Replace with JWT + RBAC middleware.
     role = request.headers.get("X-Role", "")
     if role != "assistant":
         return (
@@ -34,7 +32,6 @@ def _require_assistant_role():
 
 
 def _assistant_id_from_request() -> str | None:
-    # TODO: Replace this with JWT-based identity extraction.
     assistant_id = request.headers.get("X-Assistant-Id") or request.args.get("assistantId")
     if not assistant_id:
         return None
@@ -90,7 +87,6 @@ def get_assistant_labs(college: str):
             400,
         )
 
-    # Protect Postgres from out-of-bounds integer crashes caused by legacy frontend IDs
     try:
         assistant_id_int = int(assistant_id)
         if assistant_id_int > 2147483647 or assistant_id_int < -2147483648:
@@ -119,8 +115,8 @@ def get_assistant_labs(college: str):
                 """
                 SELECT
                     l.id,
-                    CAST(l.id AS TEXT) AS "labNo",
-                    COALESCE(l.name, CONCAT('Computer Lab ', l.id::TEXT)) AS name,
+                    l.id AS "labNo",
+                    l.name,
                     l.floor,
                     a.id AS "assignedAssistantId",
                     a.name AS "assignedAssistantName"
@@ -131,6 +127,9 @@ def get_assistant_labs(college: str):
                 (assistant_id, college_row["id"]),
             )
             rows = cur.fetchall()
+            for row in rows:
+                row["labNo"] = str(row["labNo"])
+                row["name"] = row["name"] or f"Computer Lab {row['id']}"
 
         return jsonify({"success": True, "data": rows}), 200
     except Exception as exc:
@@ -169,8 +168,6 @@ def get_assistant_lab_timetable(college: str, lab_id: int):
             400,
         )
 
-    # Protect Postgres from out-of-bounds integer crashes caused by legacy frontend IDs
-    # If the ID is invalid for the DB, the assistant definitively does not own this lab
     try:
         assistant_id_int = int(assistant_id)
         if assistant_id_int > 2147483647 or assistant_id_int < -2147483648:
@@ -221,8 +218,8 @@ def get_assistant_lab_timetable(college: str, lab_id: int):
                 """
                 SELECT
                     l.id,
-                    CAST(l.id AS TEXT) AS "labNo",
-                    COALESCE(l.name, CONCAT('Computer Lab ', l.id::TEXT)) AS name,
+                    l.id AS "labNo",
+                    l.name,
                     l.floor,
                     t.mon_slot_id,
                     t.tue_slot_id,
@@ -249,6 +246,9 @@ def get_assistant_lab_timetable(college: str, lab_id: int):
                     404,
                 )
 
+            row["labNo"] = str(row["labNo"])
+            row["name"] = row["name"] or f"Computer Lab {row['id']}"
+
             slot_ids = [
                 row[_DAY_COLUMN_MAP[day]]
                 for day in _DAY_KEYS
@@ -261,7 +261,6 @@ def get_assistant_lab_timetable(college: str, lab_id: int):
                 slot_id = row[_DAY_COLUMN_MAP[day]]
                 timetable[day] = slots_map.get(slot_id) if slot_id else None
 
-        # TODO: Add attendance/usage summary once event logs table is available.
         return (
             jsonify(
                 {

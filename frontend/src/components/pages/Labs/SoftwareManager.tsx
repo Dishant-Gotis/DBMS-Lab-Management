@@ -2,27 +2,25 @@ import React, { useMemo, useState } from 'react';
 import { Modal } from '../../common/Modal';
 import { Button } from '../../common/Button';
 import { type DemoPC } from '../../../utils/labData';
-import { mockData } from '../../../mockData';
 
 type SoftwareEntry = { id: string; name: string; version: string; category: string };
-
-const ALL_SOFTWARE: SoftwareEntry[] = mockData.software as SoftwareEntry[];
 
 interface SoftwareManagerProps {
   pc: DemoPC;
   installedIds: string[];
+  availableSoftware?: SoftwareEntry[];
   onSave: (ids: string[]) => void;
   onClose: () => void;
 }
 
-const SoftwareManager: React.FC<SoftwareManagerProps> = ({ pc, installedIds, onSave, onClose }) => {
+const SoftwareManager: React.FC<SoftwareManagerProps> = ({ pc, installedIds, availableSoftware = [], onSave, onClose }) => {
   const [selected, setSelected] = useState<Set<string>>(new Set(installedIds));
   const [customSoftware, setCustomSoftware] = useState<SoftwareEntry[]>([]);
   const [newSoftwareForm, setNewSoftwareForm] = useState({ name: '', version: '', category: '' });
 
   const allAvailableSoftware = useMemo(
-    () => [...ALL_SOFTWARE, ...customSoftware],
-    [customSoftware]
+    () => [...availableSoftware, ...customSoftware],
+    [availableSoftware, customSoftware]
   );
 
   const toggle = (id: string) => {

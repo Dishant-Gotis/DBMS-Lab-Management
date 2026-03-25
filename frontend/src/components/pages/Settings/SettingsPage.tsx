@@ -8,9 +8,7 @@ import { FiMoon, FiSun } from 'react-icons/fi';
 const SettingsPage: React.FC = () => {
   const { isDarkMode, toggleDarkMode } = useApp();
   const { user } = useAuth();
-  const [notifications, setNotifications] = useState(true);
-  const [emailAlerts, setEmailAlerts] = useState(true);
-  const [twoFactor, setTwoFactor] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   const Toggle: React.FC<{ enabled: boolean; onToggle: () => void }> = ({ enabled, onToggle }) => (
     <button
@@ -64,59 +62,17 @@ const SettingsPage: React.FC = () => {
         </div>
       </Card>
 
-      {/* Notification Settings */}
-      <Card title="Notifications">
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-medium text-slate-900">Desktop Notifications</p>
-              <p className="text-sm text-slate-500">Receive notifications on key events</p>
-            </div>
-            <Toggle enabled={notifications} onToggle={() => setNotifications(!notifications)} />
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-medium text-slate-900">Email Alerts</p>
-              <p className="text-sm text-slate-500">Receive updates via email</p>
-            </div>
-            <Toggle enabled={emailAlerts} onToggle={() => setEmailAlerts(!emailAlerts)} />
-          </div>
-        </div>
-      </Card>
-
-      {/* Security Settings */}
       <Card title="Security">
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-medium text-slate-900">Two-Factor Authentication</p>
-              <p className="text-sm text-slate-500">Enhance your account security</p>
-            </div>
-            <Toggle enabled={twoFactor} onToggle={() => setTwoFactor(!twoFactor)} />
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="font-medium text-slate-900">Change Password</p>
+            <p className="text-sm text-slate-500">Update your account password securely.</p>
           </div>
-
-          <div className="border-t border-slate-200 pt-4 mt-4">
-            <Button label="Change Password" variant="secondary" />
-          </div>
-        </div>
-      </Card>
-
-      {/* About */}
-      <Card title="About">
-        <div className="space-y-3 text-sm text-slate-600">
-          <div className="flex justify-between">
-            <span>Application Version</span>
-            <span className="font-medium text-slate-900">0.1.0 (Alpha)</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Last Updated</span>
-            <span className="font-medium text-slate-900">March 17, 2026</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Platform</span>
-            <span className="font-medium text-slate-900">Web Application</span>
-          </div>
+          <Button
+            label={isChangingPassword ? 'Coming Soon' : 'Change Password'}
+            variant="secondary"
+            onClick={() => setIsChangingPassword(true)}
+          />
         </div>
       </Card>
     </div>

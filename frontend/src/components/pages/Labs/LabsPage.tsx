@@ -4,21 +4,11 @@ import { SearchBar } from '../../common/SearchBar';
 import { Modal } from '../../common/Modal';
 import { Button } from '../../common/Button';
 import { useAuth } from '../../../context/AuthContext';
-import { mockData } from '../../../mockData';
 import { FiPackage, FiLoader, FiAlertCircle, FiRefreshCw } from 'react-icons/fi';
-import SoftwareManager from './SoftwareManager';
 import {
   fetchLabs, fetchAssistantLabs, fetchFacultyLabs,
   fetchPcDetails, type ApiLab, type ApiSoftware,
 } from '../../../services/api';
-
-// ─── Types ──────────────────────────────────────────────────────────────────
-
-type SoftwareEntry = { id: string; name: string; version: string; category: string };
-const ALL_SOFTWARE: SoftwareEntry[] = mockData.software as SoftwareEntry[];
-
-// Simple mock DemoPC shape for the software manager (no real PC-list endpoint yet)
-interface DemoPC { id: string; pcNo: string; os: string; processor: string; ram: string; storage: string; gpu: string; status: 'active' | 'inactive' | 'maintenance' }
 
 // ─── PC Software Detail Panel ────────────────────────────────────────────────
 
@@ -105,10 +95,6 @@ const LabsPage: React.FC = () => {
   const [selectedLab, setSelectedLab] = useState<ApiLab | null>(null);
   const [viewPcSoftware, setViewPcSoftware] = useState<number | null>(null);
 
-  // Legacy software manager (keeps existing mock-based flow for admin edits)
-  const [softwarePc, setSoftwarePc] = useState<DemoPC | null>(null);
-  const [pcSoftwareMap, setPcSoftwareMap] = useState<Record<string, string[]>>({});
-
   // ── Fetch real labs based on role ─────────────────────────────────────────
   const loadLabs = () => {
     setFetchLoading(true);
@@ -166,30 +152,11 @@ const LabsPage: React.FC = () => {
     );
   }
 
-  const handleSaveSoftware = (ids: string[]) => {
-    if (!softwarePc) return;
-    setPcSoftwareMap(prev => ({ ...prev, [softwarePc.id]: ids }));
-    setSoftwarePc(null);
-  };
-
-  const getPcInstalledIds = (pcId: string): string[] =>
-    pcSoftwareMap[pcId] ?? ALL_SOFTWARE.map(s => s.id);
-
   return (
     <div className="space-y-5">
       {/* PC Software Detail (real API) */}
       {viewPcSoftware !== null && (
         <PcSoftwareDetail pcId={viewPcSoftware} onClose={() => setViewPcSoftware(null)} />
-      )}
-
-      {/* Legacy software manager modal stub */}
-      {softwarePc && (
-        <SoftwareManager
-          pc={softwarePc}
-          installedIds={getPcInstalledIds(softwarePc.id)}
-          onSave={handleSaveSoftware}
-          onClose={() => setSoftwarePc(null)}
-        />
       )}
 
       {/* ── Header ── */}
