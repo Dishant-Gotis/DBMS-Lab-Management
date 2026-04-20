@@ -2,7 +2,7 @@ import os
 
 from flask import Blueprint, jsonify, request
 
-from extensions import get_db_connection, get_dict_cursor
+from extensions import get_db
 
 
 auth_bp = Blueprint("auth", __name__)
@@ -49,78 +49,59 @@ def login():
             )
         return jsonify({"success": False, "error": "Invalid credentials", "statusCode": 401}), 401
 
-    conn = None
     try:
-        conn = get_db_connection()
-        with get_dict_cursor(conn) as cur:
-            if role == "faculty":
-                cur.execute(
-                    """
-                    SELECT id, name, email
-                    FROM faculty
-                    WHERE lower(email) = %s AND password = %s
-                    LIMIT 1
-                    """,
-                    (email, password),
-                )
-                row = cur.fetchone()
-                if not row:
-                    return jsonify({"success": False, "error": "Invalid credentials", "statusCode": 401}), 401
+        db = get_db()
 
-                return (
-                    jsonify(
-                        {
-                            "success": True,
-                            "data": {
-                                "id": str(row["id"]),
-                                "name": row["name"],
-                                "email": row["email"],
-                                "role": "faculty",
-                                "assignedLabs": [],
-                            },
-                        }
-                    ),
-                    200,
-                )
+        if role == "faculty":
+            row = db.faculty.find_one(
+                {"email": email, "password": password},
+                {"_id": 0, "id": 1, "name": 1, "email": 1},
+            )
+            if not row:
+                return jsonify({"success": False, "error": "Invalid credentials", "statusCode": 401}), 401
 
-            if role in ("assistant", "labAssistant"):
-                cur.execute(
-                    """
-                    SELECT
-                        a.id,
-                        a.name,
-                        a.email,
-                        a.lab_id,
-                        l.id AS lab_no
-                    FROM assistants a
-                    LEFT JOIN labs l ON l.id = a.lab_id
-                    WHERE lower(a.email) = %s AND a.password = %s
-                    LIMIT 1
-                    """,
-                    (email, password),
-                )
-                row = cur.fetchone()
-                if not row:
-                    return jsonify({"success": False, "error": "Invalid credentials", "statusCode": 401}), 401
+            return (
+                jsonify(
+                    {
+                        "success": True,
+                        "data": {
+                            "id": str(row["id"]),
+                            "name": row["name"],
+                            "email": row["email"],
+                            "role": "faculty",
+                            "assignedLabs": [],
+                        },
+                    }
+                ),
+                200,
+            )
 
-                assigned_labs = [str(row["lab_no"])] if row.get("lab_no") else []
-                return (
-                    jsonify(
-                        {
-                            "success": True,
-                            "data": {
-                                "id": str(row["id"]),
-                                "name": row["name"],
-                                "email": row["email"],
-                                "role": "labAssistant",
-                                "assignedLabs": assigned_labs,
-                            },
-                        }
-                    ),
-                    200,
-                )
+        if role in ("assistant", "labAssistant"):
+            row = db.assistants.find_one(
+                {"email": email, "password": password},
+                {"_id": 0, "id": 1, "name": 1, "email": 1, "lab_id": 1},
+            )
+            if not row:
+                return jsonify({"success": False, "error": "Invalid credentials", "statusCode": 401}), 401
 
-            return jsonify({"success": False, "error": "Unsupported role", "statusCode": 400}), 400
+            assigned_labs = [str(row["lab_id"])] if row.get("lab_id") else []
+            return (
+                jsonify(
+                    {
+                        "success": True,
+                        "data": {
+                            "id": str(row["id"]),
+                            "name": row["name"],
+                            "email": row["email"],
+                            "role": "labAssistant",
+                            "assignedLabs": assigned_labs,
+                        },
+                    }
+                ),
+                200,
+            )
+
+        return jsonify({"success": False, "error": "Unsupported role", "statusCode": 400}), 400
     except Exception as exc:
         return (
             jsonify(
@@ -133,6 +114,3 @@ def login():
             ),
             500,
         )
-    finally:
-        if conn:
-            conn.close()

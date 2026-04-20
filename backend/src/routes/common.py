@@ -1,7 +1,7 @@
-from psycopg2.extensions import cursor
+import re
 
 
-def resolve_college(cur: cursor, college: str):
+def resolve_college(db, college: str):
     college_value = college.strip()
     if not college_value:
         return None
@@ -9,24 +9,16 @@ def resolve_college(cur: cursor, college: str):
     normalized = " ".join(college_value.replace("-", " ").split())
 
     if college_value.isdigit():
-        cur.execute(
-            """
-            SELECT id, name, city, state, pincode
-            FROM colleges
-            WHERE id = %s
-            """,
-            (int(college_value),),
-        )
-        return cur.fetchone()
+        return db.colleges.find_one({"id": int(college_value)}, {"_id": 0})
 
-    cur.execute(
-        """
-        SELECT id, name, city, state, pincode
-        FROM colleges
-        WHERE lower(name) = lower(%s)
-           OR lower(name) = lower(%s)
-        LIMIT 1
-        """,
-        (college_value, normalized),
+    escaped_original = re.escape(college_value)
+    escaped_normalized = re.escape(normalized)
+    return db.colleges.find_one(
+        {
+            "$or": [
+                {"name": {"$regex": f"^{escaped_original}$", "$options": "i"}},
+                {"name": {"$regex": f"^{escaped_normalized}$", "$options": "i"}},
+            ]
+        },
+        {"_id": 0},
     )
-    return cur.fetchone()

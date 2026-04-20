@@ -1,6 +1,8 @@
+import re
+
 from flask import Blueprint, jsonify, request
 
-from extensions import get_db_connection, get_dict_cursor
+from extensions import get_db
 from .common import resolve_college
 
 labs_bp = Blueprint("labs", __name__)
@@ -21,244 +23,118 @@ def get_labs(college: str):
         page_size = 50
 
     offset = (page - 1) * page_size
-    search_like = f"%{q}%"
-    id_search = int(q) if q.isdigit() else None
 
-    conn = None
     try:
-        conn = get_db_connection()
-        with get_dict_cursor(conn) as cur:
-            college_row = resolve_college(cur, college)
-            if not college_row:
-                return (
-                    jsonify(
-                        {
-                            "success": False,
-                            "error": "College not found",
-                            "statusCode": 404,
-                        }
-                    ),
-                    404,
-                )
+        db = get_db()
+        college_row = resolve_college(db, college)
+        if not college_row:
+            return jsonify({"success": False, "error": "College not found", "statusCode": 404}), 404
 
-            cur.execute(
-                """
-                SELECT COUNT(*) AS total
-                FROM labs l
-                WHERE l.college_id = %s
-                                    AND (
-                                                %s = ''
-                                                OR (%s IS NOT NULL AND l.id = %s)
-                                                OR l.name ILIKE %s
-                                    )
-                """,
-                                (college_row["id"], q, id_search, id_search, search_like),
-            )
-            total = cur.fetchone()["total"]
+        base_filter = {"college_id": college_row["id"]}
+        if q:
+            if q.isdigit():
+                base_filter["$or"] = [{"id": int(q)}, {"name": {"$regex": re.escape(q), "$options": "i"}}]
+            else:
+                base_filter["name"] = {"$regex": re.escape(q), "$options": "i"}
 
-            cur.execute(
-                """
-                SELECT
-                    l.id,
-                    l.id AS "labNo",
-                    l.name,
-                    l.floor,
-                    a.id AS "assignedAssistantId",
-                    a.name AS "assignedAssistantName"
-                FROM labs l
-                LEFT JOIN assistants a ON a.lab_id = l.id
-                WHERE l.college_id = %s
-                  AND (
-                        %s = ''
-                        OR (%s IS NOT NULL AND l.id = %s)
-                        OR l.name ILIKE %s
-                  )
-                ORDER BY l.id
-                LIMIT %s OFFSET %s
-                """,
-                (college_row["id"], q, id_search, id_search, search_like, page_size, offset),
-            )
-            rows = cur.fetchall()
-            for row in rows:
-                row["labNo"] = str(row["labNo"])
-                row["name"] = row["name"] or f"Computer Lab {row['id']}"
-
-        return (
-            jsonify(
-                {
-                    "success": True,
-                    "data": rows,
-                    "total": total,
-                    "page": page,
-                    "pageSize": page_size,
-                }
-            ),
-            200,
+        total = db.labs.count_documents(base_filter)
+        rows = list(
+            db.labs.find(base_filter, {"_id": 0, "id": 1, "name": 1, "floor": 1})
+            .sort("id", 1)
+            .skip(offset)
+            .limit(page_size)
         )
+
+        lab_ids = [row["id"] for row in rows]
+        assistants = list(
+            db.assistants.find({"lab_id": {"$in": lab_ids}}, {"_id": 0, "id": 1, "name": 1, "lab_id": 1}).sort("id", 1)
+        ) if lab_ids else []
+        assistant_map = {}
+        for assistant in assistants:
+            assistant_map.setdefault(assistant.get("lab_id"), assistant)
+
+        data = []
+        for row in rows:
+            assistant = assistant_map.get(row["id"])
+            data.append(
+                {
+                    "id": row["id"],
+                    "labNo": str(row["id"]),
+                    "name": row.get("name") or f"Computer Lab {row['id']}",
+                    "floor": row.get("floor"),
+                    "assignedAssistantId": assistant.get("id") if assistant else None,
+                    "assignedAssistantName": assistant.get("name") if assistant else None,
+                }
+            )
+
+        return jsonify({"success": True, "data": data, "total": total, "page": page, "pageSize": page_size}), 200
     except Exception as exc:
-        return (
-            jsonify(
-                {
-                    "success": False,
-                    "error": "Failed to fetch labs",
-                    "statusCode": 500,
-                    "details": str(exc),
-                }
-            ),
-            500,
-        )
-    finally:
-        if conn:
-            conn.close()
+        return jsonify({"success": False, "error": "Failed to fetch labs", "statusCode": 500, "details": str(exc)}), 500
 
 
 @labs_bp.get("/<college>/labs/lab/<int:lab_id>")
 def get_lab_by_id(college: str, lab_id: int):
-    conn = None
     try:
-        conn = get_db_connection()
-        with get_dict_cursor(conn) as cur:
-            college_row = resolve_college(cur, college)
-            if not college_row:
-                return (
-                    jsonify(
-                        {
-                            "success": False,
-                            "error": "College not found",
-                            "statusCode": 404,
-                        }
-                    ),
-                    404,
-                )
+        db = get_db()
+        college_row = resolve_college(db, college)
+        if not college_row:
+            return jsonify({"success": False, "error": "College not found", "statusCode": 404}), 404
 
-            cur.execute(
-                """
-                SELECT
-                    l.id,
-                    l.id AS "labNo",
-                    l.name,
-                    l.floor,
-                    a.id AS "assignedAssistantId",
-                    a.name AS "assignedAssistantName"
-                FROM labs l
-                LEFT JOIN assistants a ON a.lab_id = l.id
-                WHERE l.id = %s AND l.college_id = %s
-                """,
-                (lab_id, college_row["id"]),
-            )
-            lab = cur.fetchone()
+        row = db.labs.find_one({"id": lab_id, "college_id": college_row["id"]}, {"_id": 0, "id": 1, "name": 1, "floor": 1})
+        if not row:
+            return jsonify({"success": False, "error": "Lab not found", "statusCode": 404}), 404
 
-        if lab:
-            lab["labNo"] = str(lab["labNo"])
-            lab["name"] = lab["name"] or f"Computer Lab {lab['id']}"
+        assistant = db.assistants.find_one({"lab_id": lab_id}, {"_id": 0, "id": 1, "name": 1})
+        data = {
+            "id": row["id"],
+            "labNo": str(row["id"]),
+            "name": row.get("name") or f"Computer Lab {row['id']}",
+            "floor": row.get("floor"),
+            "assignedAssistantId": assistant.get("id") if assistant else None,
+            "assignedAssistantName": assistant.get("name") if assistant else None,
+        }
 
-        if not lab:
-            return (
-                jsonify(
-                    {
-                        "success": False,
-                        "error": "Lab not found",
-                        "statusCode": 404,
-                    }
-                ),
-                404,
-            )
-
-        return jsonify({"success": True, "data": lab}), 200
+        return jsonify({"success": True, "data": data}), 200
     except Exception as exc:
-        return (
-            jsonify(
-                {
-                    "success": False,
-                    "error": "Failed to fetch lab",
-                    "statusCode": 500,
-                    "details": str(exc),
-                }
-            ),
-            500,
-        )
-    finally:
-        if conn:
-            conn.close()
+        return jsonify({"success": False, "error": "Failed to fetch lab", "statusCode": 500, "details": str(exc)}), 500
 
 
 @labs_bp.get("/<college>/labs/<int:pc_id>")
 def get_pc_software_details(college: str, pc_id: int):
-    conn = None
     try:
-        conn = get_db_connection()
-        with get_dict_cursor(conn) as cur:
-            college_row = resolve_college(cur, college)
-            if not college_row:
-                return (
-                    jsonify(
-                        {
-                            "success": False,
-                            "error": "College not found",
-                            "statusCode": 404,
-                        }
-                    ),
-                    404,
-                )
+        db = get_db()
+        college_row = resolve_college(db, college)
+        if not college_row:
+            return jsonify({"success": False, "error": "College not found", "statusCode": 404}), 404
 
-            cur.execute(
-                """
-                SELECT
-                    p.id,
-                    p.password,
-                    p.os_id AS "osId",
-                    o.name AS "osName",
-                    o.version AS "osVersion"
-                FROM pcs p
-                LEFT JOIN os o ON o.id = p.os_id
-                WHERE p.id = %s
-                """,
-                (pc_id,),
-            )
-            pc_row = cur.fetchone()
+        pc_row = db.pcs.find_one({"id": pc_id}, {"_id": 0, "id": 1, "password": 1, "os_id": 1, "lab_id": 1})
+        if not pc_row:
+            return jsonify({"success": False, "error": "PC not found", "statusCode": 404}), 404
 
-            if not pc_row:
-                return (
-                    jsonify(
-                        {
-                            "success": False,
-                            "error": "PC not found",
-                            "statusCode": 404,
-                        }
-                    ),
-                    404,
-                )
+        lab_row = db.labs.find_one({"id": pc_row.get("lab_id"), "college_id": college_row["id"]}, {"_id": 0, "id": 1})
+        if not lab_row:
+            return jsonify({"success": False, "error": "PC not found", "statusCode": 404}), 404
 
-            cur.execute(
-                """
-                SELECT
-                    id,
-                    name,
-                    version,
-                    installed_at AS "installedAt"
-                FROM software
-                WHERE pc_id = %s
-                ORDER BY installed_at DESC
-                """,
-                (pc_id,),
-            )
-            softwares = cur.fetchall()
+        os_row = db.os.find_one({"id": pc_row.get("os_id")}, {"_id": 0, "id": 1, "name": 1, "version": 1})
+        softwares = list(
+            db.software.find({"pc_id": pc_id}, {"_id": 0, "id": 1, "name": 1, "version": 1, "installed_at": 1}).sort("installed_at", -1)
+        )
+
+        for sw in softwares:
+            sw["installedAt"] = sw.pop("installed_at", None)
 
         return (
             jsonify(
                 {
                     "success": True,
                     "data": {
-                        "college": {
-                            "id": college_row["id"],
-                            "name": college_row["name"],
-                        },
+                        "college": {"id": college_row["id"], "name": college_row["name"]},
                         "pc": {
                             "id": pc_row["id"],
-                            "password": pc_row["password"],
-                            "osId": pc_row["osId"],
-                            "osName": pc_row["osName"],
-                            "osVersion": pc_row["osVersion"],
+                            "password": pc_row.get("password"),
+                            "osId": pc_row.get("os_id"),
+                            "osName": os_row.get("name") if os_row else None,
+                            "osVersion": os_row.get("version") if os_row else None,
                             "specDescription": None,
                         },
                         "softwares": softwares,
@@ -268,17 +144,4 @@ def get_pc_software_details(college: str, pc_id: int):
             200,
         )
     except Exception as exc:
-        return (
-            jsonify(
-                {
-                    "success": False,
-                    "error": "Failed to fetch PC software details",
-                    "statusCode": 500,
-                    "details": str(exc),
-                }
-            ),
-            500,
-        )
-    finally:
-        if conn:
-            conn.close()
+        return jsonify({"success": False, "error": "Failed to fetch PC software details", "statusCode": 500, "details": str(exc)}), 500

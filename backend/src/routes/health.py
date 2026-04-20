@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify
 
-from extensions import get_db_connection, get_dict_cursor
+from extensions import mongo_ping
 
 
 health_bp = Blueprint("health", __name__)
@@ -8,12 +8,8 @@ health_bp = Blueprint("health", __name__)
 
 @health_bp.get("/health")
 def health_check():
-    conn = None
     try:
-        conn = get_db_connection()
-        with get_dict_cursor(conn) as cur:
-            cur.execute("SELECT 1 AS ok")
-            cur.fetchone()
+        mongo_ping()
         return jsonify({"success": True, "status": "ok", "database": "reachable"}), 200
     except Exception as exc:
         return (
@@ -27,6 +23,3 @@ def health_check():
             ),
             503,
         )
-    finally:
-        if conn:
-            conn.close()

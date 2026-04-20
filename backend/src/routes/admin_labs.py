@@ -1,14 +1,16 @@
+from datetime import datetime, timezone
+
 from flask import Blueprint, jsonify, request
-from extensions import get_db_connection, get_dict_cursor
-from .common import resolve_college
+
+from extensions import get_db, get_next_sequence
+from .api_utils import bad_request, get_db_and_college, not_found, require_role, server_error
 
 admin_labs_bp = Blueprint("admin_labs", __name__)
 
+
 def _require_admin_role():
-    role = request.headers.get("X-Role", "")
-    if role != "admin":
-        return jsonify({"success": False, "error": "Only admins can access these endpoints", "statusCode": 403}), 403
-    return None
+    return require_role("admin", "Only admins can access these endpoints")
+
 
 @admin_labs_bp.post("/<college>/admin/labs")
 def create_admin_lab(college: str):
@@ -21,37 +23,21 @@ def create_admin_lab(college: str):
     name = payload.get("name")
 
     if floor is None:
-        return jsonify({"success": False, "error": "Missing floor number", "statusCode": 400}), 400
+        return bad_request("Missing floor number")
 
-    conn = None
     try:
-        conn = get_db_connection()
-        with get_dict_cursor(conn) as cur:
-            college_row = resolve_college(cur, college)
-            if not college_row:
-                return jsonify({"success": False, "error": "College not found", "statusCode": 404}), 404
+        db, college_row, err = get_db_and_college(college)
+        if err:
+            return err
 
-            cur.execute(
-                """
-                INSERT INTO labs (college_id, floor, name)
-                VALUES (%s, %s, %s)
-                RETURNING id, college_id, floor, name
-                """,
-                (college_row["id"], floor, name)
-            )
-            row = cur.fetchone()
+        lab_id = get_next_sequence("labs")
+        row = {"id": lab_id, "college_id": college_row["id"], "floor": floor, "name": name}
+        db.labs.insert_one(row)
 
-            row["assignedAssistantName"] = None
-
-        conn.commit()
-        return jsonify({"success": True, "data": row, "message": "Lab created successfully"}), 201
+        return jsonify({"success": True, "data": {**row, "assignedAssistantName": None}, "message": "Lab created successfully"}), 201
     except Exception as exc:
-        if conn:
-            conn.rollback()
-        return jsonify({"success": False, "error": "Failed to create lab", "statusCode": 500, "details": str(exc)}), 500
-    finally:
-        if conn:
-            conn.close()
+        return server_error("Failed to create lab", exc)
+
 
 @admin_labs_bp.get("/<college>/admin/labs/<int:lab_id>/pcs")
 def get_admin_lab_pcs(college: str, lab_id: int):
@@ -59,68 +45,64 @@ def get_admin_lab_pcs(college: str, lab_id: int):
     if guard:
         return guard
 
-    conn = None
     try:
-        conn = get_db_connection()
-        with get_dict_cursor(conn) as cur:
-            college_row = resolve_college(cur, college)
-            if not college_row:
-                return jsonify({"success": False, "error": "College not found", "statusCode": 404}), 404
+        db, college_row, err = get_db_and_college(college)
+        if err:
+            return err
 
-            cur.execute("SELECT id FROM labs WHERE id = %s AND college_id = %s", (lab_id, college_row["id"]))
-            if not cur.fetchone():
-                return jsonify({"success": False, "error": "Lab not found", "statusCode": 404}), 404
+        lab = db.labs.find_one({"id": lab_id, "college_id": college_row["id"]}, {"_id": 0, "id": 1})
+        if not lab:
+            return not_found("Lab not found")
 
-            cur.execute(
-                """
-                SELECT
-                    p.id,
-                    p.pc_no AS "pcNo",
-                    p.status,
-                    p.password,
-                    p.processor,
-                    p.ram,
-                    p.storage,
-                    p.os_id AS "osId",
-                    o.name AS "osName",
-                    o.version AS "osVersion"
-                FROM pcs p
-                LEFT JOIN os o ON o.id = p.os_id
-                WHERE p.lab_id = %s
-                ORDER BY p.id
-                """,
-                (lab_id,),
+        pcs_rows = list(
+            db.pcs.find({"lab_id": lab_id}, {"_id": 0, "id": 1, "pc_no": 1, "status": 1, "password": 1, "processor": 1, "ram": 1, "storage": 1, "os_id": 1}).sort("id", 1)
+        )
+
+        pc_ids = [row["id"] for row in pcs_rows]
+        os_ids = list({row.get("os_id") for row in pcs_rows if row.get("os_id") is not None})
+
+        os_rows = list(db.os.find({"id": {"$in": os_ids}}, {"_id": 0, "id": 1, "name": 1, "version": 1})) if os_ids else []
+        os_map = {o["id"]: o for o in os_rows}
+
+        softwares = list(
+            db.software.find({"pc_id": {"$in": pc_ids}}, {"_id": 0, "id": 1, "name": 1, "version": 1, "pc_id": 1, "installed_at": 1}).sort("installed_at", -1)
+        ) if pc_ids else []
+
+        sw_by_pc = {}
+        for sw in softwares:
+            sw_by_pc.setdefault(sw.get("pc_id"), []).append(
+                {
+                    "id": sw.get("id"),
+                    "name": sw.get("name"),
+                    "version": sw.get("version"),
+                    "pcId": sw.get("pc_id"),
+                    "installedAt": sw.get("installed_at"),
+                }
             )
-            pcs_rows = cur.fetchall()
 
-            pcs_dict = {row["id"]: row for row in pcs_rows}
+        data = []
+        for pc in pcs_rows:
+            os_row = os_map.get(pc.get("os_id"))
+            data.append(
+                {
+                    "id": pc.get("id"),
+                    "pcNo": pc.get("pc_no"),
+                    "status": pc.get("status"),
+                    "password": pc.get("password"),
+                    "processor": pc.get("processor"),
+                    "ram": pc.get("ram"),
+                    "storage": pc.get("storage"),
+                    "osId": pc.get("os_id"),
+                    "osName": os_row.get("name") if os_row else None,
+                    "osVersion": os_row.get("version") if os_row else None,
+                    "softwares": sw_by_pc.get(pc.get("id"), []),
+                }
+            )
 
-            if pcs_rows:
-                pc_ids = tuple(row["id"] for row in pcs_rows)
-                cur.execute(
-                    """
-                    SELECT id, name, version, pc_id as "pcId", installed_at AS "installedAt"
-                    FROM software
-                    WHERE pc_id IN %s
-                    ORDER BY installed_at DESC
-                    """,
-                    (pc_ids,),
-                )
-                softwares = cur.fetchall()
-
-                for pc in pcs_dict.values():
-                    pc["softwares"] = []
-                for sw in softwares:
-                    pcs_dict[sw["pcId"]]["softwares"].append(sw)
-            else:
-                softwares = []
-
-        return jsonify({"success": True, "data": list(pcs_dict.values())}), 200
+        return jsonify({"success": True, "data": data}), 200
     except Exception as exc:
-        return jsonify({"success": False, "error": "Failed to fetch lab PCs", "statusCode": 500, "details": str(exc)}), 500
-    finally:
-        if conn:
-            conn.close()
+        return server_error("Failed to fetch lab PCs", exc)
+
 
 @admin_labs_bp.post("/<college>/admin/labs/<int:lab_id>/pcs")
 def create_admin_lab_pc(college: str, lab_id: int):
@@ -132,38 +114,34 @@ def create_admin_lab_pc(college: str, lab_id: int):
     password = payload.get("password")
     pc_no = payload.get("pcNo")
     status = payload.get("status", "active")
-    os_id = payload.get("os_id", 1)  # Default to some OS if not provided
+    os_id = payload.get("os_id", 1)
     processor = payload.get("processor")
     ram = payload.get("ram")
     storage = payload.get("storage")
 
     if not password:
-        return jsonify({"success": False, "error": "Missing password", "statusCode": 400}), 400
+        return bad_request("Missing password")
 
-    conn = None
     try:
-        conn = get_db_connection()
-        with get_dict_cursor(conn) as cur:
-            cur.execute(
-                """
-                INSERT INTO pcs (password, os_id, lab_id, processor, ram, storage, pc_no, status)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                RETURNING id, pc_no AS "pcNo", status, password, os_id AS "osId", processor, ram, storage
-                """,
-                (password, os_id, lab_id, processor, ram, storage, pc_no, status),
-            )
-            row = cur.fetchone()
-        conn.commit()
+        db = get_db()
+        pc_id = get_next_sequence("pcs")
+        row = {
+            "id": pc_id,
+            "password": password,
+            "os_id": int(os_id) if os_id is not None else None,
+            "lab_id": lab_id,
+            "processor": processor,
+            "ram": ram,
+            "storage": storage,
+            "pc_no": pc_no,
+            "status": status,
+        }
+        db.pcs.insert_one(row)
 
-        row["softwares"] = [] # Return empty array for convenience
-        return jsonify({"success": True, "data": row, "message": "PC added to lab"}), 201
+        return jsonify({"success": True, "data": {"id": pc_id, "pcNo": pc_no, "status": status, "password": password, "osId": row["os_id"], "processor": processor, "ram": ram, "storage": storage, "softwares": []}, "message": "PC added to lab"}), 201
     except Exception as exc:
-        if conn:
-            conn.rollback()
-        return jsonify({"success": False, "error": "Failed to create PC", "statusCode": 500, "details": str(exc)}), 500
-    finally:
-        if conn:
-            conn.close()
+        return server_error("Failed to create PC", exc)
+
 
 @admin_labs_bp.post("/<college>/admin/pcs/<int:pc_id>/software")
 def install_pc_software(college: str, pc_id: int):
@@ -176,30 +154,17 @@ def install_pc_software(college: str, pc_id: int):
     version = payload.get("version")
 
     if not name:
-        return jsonify({"success": False, "error": "Missing software name", "statusCode": 400}), 400
+        return bad_request("Missing software name")
 
-    conn = None
     try:
-        conn = get_db_connection()
-        with get_dict_cursor(conn) as cur:
-            cur.execute(
-                """
-                INSERT INTO software (name, version, pc_id)
-                VALUES (%s, %s, %s)
-                RETURNING id, name, version, pc_id AS "pcId", installed_at AS "installedAt"
-                """,
-                (name, version, pc_id),
-            )
-            row = cur.fetchone()
-        conn.commit()
-        return jsonify({"success": True, "data": row, "message": "Software installed"}), 201
+        db = get_db()
+        sw_id = get_next_sequence("software")
+        installed_at = datetime.now(timezone.utc).isoformat()
+        row = {"id": sw_id, "name": name, "version": version, "pc_id": pc_id, "installed_at": installed_at}
+        db.software.insert_one(row)
+        return jsonify({"success": True, "data": {"id": sw_id, "name": name, "version": version, "pcId": pc_id, "installedAt": installed_at}, "message": "Software installed"}), 201
     except Exception as exc:
-        if conn:
-            conn.rollback()
-        return jsonify({"success": False, "error": "Failed to install software", "statusCode": 500, "details": str(exc)}), 500
-    finally:
-        if conn:
-            conn.close()
+        return server_error("Failed to install software", exc)
 
 
 @admin_labs_bp.delete("/<college>/admin/labs/<int:lab_id>")
@@ -208,24 +173,22 @@ def delete_admin_lab(college: str, lab_id: int):
     if guard:
         return guard
 
-    conn = None
     try:
-        conn = get_db_connection()
-        with get_dict_cursor(conn) as cur:
-            cur.execute("DELETE FROM software WHERE pc_id IN (SELECT id FROM pcs WHERE lab_id = %s)", (lab_id,))
-            cur.execute("DELETE FROM pcs WHERE lab_id = %s", (lab_id,))
-            cur.execute("DELETE FROM labs WHERE id = %s RETURNING id", (lab_id,))
-            if not cur.fetchone():
-                return jsonify({"success": False, "error": "Lab not found", "statusCode": 404}), 404
-        conn.commit()
+        db = get_db()
+        pc_ids = [pc["id"] for pc in db.pcs.find({"lab_id": lab_id}, {"_id": 0, "id": 1})]
+        if pc_ids:
+            db.software.delete_many({"pc_id": {"$in": pc_ids}})
+        db.pcs.delete_many({"lab_id": lab_id})
+        db.timetable.delete_many({"lab_id": lab_id})
+
+        result = db.labs.delete_one({"id": lab_id})
+        if result.deleted_count == 0:
+            return not_found("Lab not found")
+
+        db.assistants.update_many({"lab_id": lab_id}, {"$set": {"lab_id": None}})
         return jsonify({"success": True, "message": "Lab and all associated computers deleted"}), 200
     except Exception as exc:
-        if conn:
-            conn.rollback()
-        return jsonify({"success": False, "error": "Failed to delete lab", "statusCode": 500, "details": str(exc)}), 500
-    finally:
-        if conn:
-            conn.close()
+        return server_error("Failed to delete lab", exc)
 
 
 @admin_labs_bp.delete("/<college>/admin/labs/<int:lab_id>/pcs/<int:pc_id>")
@@ -234,23 +197,15 @@ def delete_admin_lab_pc(college: str, lab_id: int, pc_id: int):
     if guard:
         return guard
 
-    conn = None
     try:
-        conn = get_db_connection()
-        with get_dict_cursor(conn) as cur:
-            cur.execute("DELETE FROM software WHERE pc_id = %s", (pc_id,))
-            cur.execute("DELETE FROM pcs WHERE id = %s AND lab_id = %s RETURNING id", (pc_id, lab_id))
-            if not cur.fetchone():
-                return jsonify({"success": False, "error": "PC not found in this lab", "statusCode": 404}), 404
-        conn.commit()
+        db = get_db()
+        db.software.delete_many({"pc_id": pc_id})
+        result = db.pcs.delete_one({"id": pc_id, "lab_id": lab_id})
+        if result.deleted_count == 0:
+            return not_found("PC not found in this lab")
         return jsonify({"success": True, "message": "PC deleted"}), 200
     except Exception as exc:
-        if conn:
-            conn.rollback()
-        return jsonify({"success": False, "error": "Failed to delete PC", "statusCode": 500, "details": str(exc)}), 500
-    finally:
-        if conn:
-            conn.close()
+        return server_error("Failed to delete PC", exc)
 
 
 @admin_labs_bp.delete("/<college>/admin/software/<int:sw_id>")
@@ -259,19 +214,11 @@ def delete_admin_software(college: str, sw_id: int):
     if guard:
         return guard
 
-    conn = None
     try:
-        conn = get_db_connection()
-        with get_dict_cursor(conn) as cur:
-            cur.execute("DELETE FROM software WHERE id = %s RETURNING id", (sw_id,))
-            if not cur.fetchone():
-                return jsonify({"success": False, "error": "Software not found", "statusCode": 404}), 404
-        conn.commit()
+        db = get_db()
+        result = db.software.delete_one({"id": sw_id})
+        if result.deleted_count == 0:
+            return not_found("Software not found")
         return jsonify({"success": True, "message": "Software deleted"}), 200
     except Exception as exc:
-        if conn:
-            conn.rollback()
-        return jsonify({"success": False, "error": "Failed to delete software", "statusCode": 500, "details": str(exc)}), 500
-    finally:
-        if conn:
-            conn.close()
+        return server_error("Failed to delete software", exc)

@@ -1,12 +1,12 @@
 from flask import Blueprint, jsonify, request
 
-from extensions import get_db_connection, get_dict_cursor
+from extensions import get_db
 from .common import resolve_college
 
 assistant_bp = Blueprint("assistant", __name__)
 
 _DAY_KEYS = ["mon", "tue", "wed", "thur", "fri"]
-_DAY_COLUMN_MAP = {
+_DAY_FIELD_MAP = {
     "mon": "mon_slot_id",
     "tue": "tue_slot_id",
     "wed": "wed_slot_id",
@@ -18,16 +18,7 @@ _DAY_COLUMN_MAP = {
 def _require_assistant_role():
     role = request.headers.get("X-Role", "")
     if role != "assistant":
-        return (
-            jsonify(
-                {
-                    "success": False,
-                    "error": "Only assistant role can access this route",
-                    "statusCode": 403,
-                }
-            ),
-            403,
-        )
+        return jsonify({"success": False, "error": "Only assistant role can access this route", "statusCode": 403}), 403
     return None
 
 
@@ -41,31 +32,45 @@ def _assistant_id_from_request() -> str | None:
     return assistant_id
 
 
-def _fetch_slots_map(cur, slot_ids: list[int]) -> dict[int, dict]:
+def _fetch_slots_map(db, slot_ids: list[int]) -> dict[int, dict]:
     if not slot_ids:
         return {}
 
-    cur.execute(
-        """
-        SELECT
-            s.id,
-            s.course_id AS "courseId",
-            c.name AS "courseName",
-            s.faculty_id AS "facultyId",
-            f.name AS "facultyName",
-            s.class_id AS "classId",
-            cls.division AS "classDivision",
-            cls.year AS "classYear"
-        FROM slots s
-        LEFT JOIN courses c ON c.id = s.course_id
-        LEFT JOIN faculty f ON f.id = s.faculty_id
-        LEFT JOIN classes cls ON cls.id = s.class_id
-        WHERE s.id = ANY(%s)
-        """,
-        (slot_ids,),
-    )
+    rows = list(db.slots.find({"id": {"$in": slot_ids}}, {"_id": 0, "id": 1, "course_id": 1, "faculty_id": 1, "class_id": 1}))
+    if not rows:
+        return {}
 
-    return {row["id"]: row for row in cur.fetchall()}
+    course_ids = list({row.get("course_id") for row in rows if row.get("course_id") is not None})
+    faculty_ids = list({row.get("faculty_id") for row in rows if row.get("faculty_id") is not None})
+    class_ids = list({row.get("class_id") for row in rows if row.get("class_id") is not None})
+
+    courses = {
+        row["id"]: row
+        for row in db.courses.find({"id": {"$in": course_ids}}, {"_id": 0, "id": 1, "name": 1})
+    } if course_ids else {}
+    faculty = {
+        row["id"]: row
+        for row in db.faculty.find({"id": {"$in": faculty_ids}}, {"_id": 0, "id": 1, "name": 1})
+    } if faculty_ids else {}
+    classes = {
+        row["id"]: row
+        for row in db.classes.find({"id": {"$in": class_ids}}, {"_id": 0, "id": 1, "division": 1, "year": 1})
+    } if class_ids else {}
+
+    out = {}
+    for row in rows:
+        class_row = classes.get(row.get("class_id"), {})
+        out[row["id"]] = {
+            "id": row["id"],
+            "courseId": row.get("course_id"),
+            "courseName": courses.get(row.get("course_id"), {}).get("name"),
+            "facultyId": row.get("faculty_id"),
+            "facultyName": faculty.get(row.get("faculty_id"), {}).get("name"),
+            "classId": row.get("class_id"),
+            "classDivision": class_row.get("division"),
+            "classYear": class_row.get("year"),
+        }
+    return out
 
 
 @assistant_bp.get("/<college>/assistant/labs")
@@ -76,16 +81,7 @@ def get_assistant_labs(college: str):
 
     assistant_id = _assistant_id_from_request()
     if not assistant_id:
-        return (
-            jsonify(
-                {
-                    "success": False,
-                    "error": "assistantId is required",
-                    "statusCode": 400,
-                }
-            ),
-            400,
-        )
+        return jsonify({"success": False, "error": "assistantId is required", "statusCode": 400}), 400
 
     try:
         assistant_id_int = int(assistant_id)
@@ -94,59 +90,23 @@ def get_assistant_labs(college: str):
     except ValueError:
         return jsonify({"success": False, "error": "Invalid assistant ID format", "statusCode": 400}), 400
 
-    conn = None
     try:
-        conn = get_db_connection()
-        with get_dict_cursor(conn) as cur:
-            college_row = resolve_college(cur, college)
-            if not college_row:
-                return (
-                    jsonify(
-                        {
-                            "success": False,
-                            "error": "College not found",
-                            "statusCode": 404,
-                        }
-                    ),
-                    404,
-                )
+        db = get_db()
+        college_row = resolve_college(db, college)
+        if not college_row:
+            return jsonify({"success": False, "error": "College not found", "statusCode": 404}), 404
 
-            cur.execute(
-                """
-                SELECT
-                    l.id,
-                    l.id AS "labNo",
-                    l.name,
-                    l.floor,
-                    a.id AS "assignedAssistantId",
-                    a.name AS "assignedAssistantName"
-                FROM assistants a
-                JOIN labs l ON l.id = a.lab_id
-                WHERE a.id = %s AND l.college_id = %s
-                """,
-                (assistant_id, college_row["id"]),
-            )
-            rows = cur.fetchall()
-            for row in rows:
-                row["labNo"] = str(row["labNo"])
-                row["name"] = row["name"] or f"Computer Lab {row['id']}"
+        assistant = db.assistants.find_one({"id": assistant_id_int}, {"_id": 0, "id": 1, "name": 1, "lab_id": 1})
+        if not assistant or not assistant.get("lab_id"):
+            return jsonify({"success": True, "data": []}), 200
 
-        return jsonify({"success": True, "data": rows}), 200
+        lab = db.labs.find_one({"id": assistant["lab_id"], "college_id": college_row["id"]}, {"_id": 0, "id": 1, "name": 1, "floor": 1})
+        if not lab:
+            return jsonify({"success": True, "data": []}), 200
+
+        return jsonify({"success": True, "data": [{"id": lab["id"], "labNo": str(lab["id"]), "name": lab.get("name") or f"Computer Lab {lab['id']}", "floor": lab.get("floor"), "assignedAssistantId": assistant["id"], "assignedAssistantName": assistant.get("name")}] }), 200
     except Exception as exc:
-        return (
-            jsonify(
-                {
-                    "success": False,
-                    "error": "Failed to fetch assistant labs",
-                    "statusCode": 500,
-                    "details": str(exc),
-                }
-            ),
-            500,
-        )
-    finally:
-        if conn:
-            conn.close()
+        return jsonify({"success": False, "error": "Failed to fetch assistant labs", "statusCode": 500, "details": str(exc)}), 500
 
 
 @assistant_bp.get("/<college>/assistant/labs/<int:lab_id>")
@@ -157,16 +117,7 @@ def get_assistant_lab_timetable(college: str, lab_id: int):
 
     assistant_id = _assistant_id_from_request()
     if not assistant_id:
-        return (
-            jsonify(
-                {
-                    "success": False,
-                    "error": "assistantId is required",
-                    "statusCode": 400,
-                }
-            ),
-            400,
-        )
+        return jsonify({"success": False, "error": "assistantId is required", "statusCode": 400}), 400
 
     try:
         assistant_id_int = int(assistant_id)
@@ -175,121 +126,29 @@ def get_assistant_lab_timetable(college: str, lab_id: int):
     except ValueError:
         return jsonify({"success": False, "error": "Invalid assistant ID format", "statusCode": 400}), 400
 
-    conn = None
     try:
-        conn = get_db_connection()
-        with get_dict_cursor(conn) as cur:
-            college_row = resolve_college(cur, college)
-            if not college_row:
-                return (
-                    jsonify(
-                        {
-                            "success": False,
-                            "error": "College not found",
-                            "statusCode": 404,
-                        }
-                    ),
-                    404,
-                )
+        db = get_db()
+        college_row = resolve_college(db, college)
+        if not college_row:
+            return jsonify({"success": False, "error": "College not found", "statusCode": 404}), 404
 
-            cur.execute(
-                """
-                SELECT 1
-                FROM assistants a
-                JOIN labs l ON l.id = a.lab_id
-                WHERE a.id = %s AND a.lab_id = %s AND l.college_id = %s
-                """,
-                (assistant_id, lab_id, college_row["id"]),
-            )
-            assigned = cur.fetchone()
-            if not assigned:
-                return (
-                    jsonify(
-                        {
-                            "success": False,
-                            "error": "Assistant is not assigned to this lab",
-                            "statusCode": 403,
-                        }
-                    ),
-                    403,
-                )
+        assistant = db.assistants.find_one({"id": assistant_id_int}, {"_id": 0, "lab_id": 1})
+        if not assistant or assistant.get("lab_id") != lab_id:
+            return jsonify({"success": False, "error": "Assistant is not assigned to this lab", "statusCode": 403}), 403
 
-            cur.execute(
-                """
-                SELECT
-                    l.id,
-                    l.id AS "labNo",
-                    l.name,
-                    l.floor,
-                    t.mon_slot_id,
-                    t.tue_slot_id,
-                    t.wed_slot_id,
-                    t.thur_slot_id,
-                    t.fri_slot_id
-                FROM labs l
-                LEFT JOIN timetable t ON t.lab_id = l.id
-                WHERE l.id = %s AND l.college_id = %s
-                """,
-                (lab_id, college_row["id"]),
-            )
-            row = cur.fetchone()
+        lab = db.labs.find_one({"id": lab_id, "college_id": college_row["id"]}, {"_id": 0, "id": 1, "name": 1, "floor": 1})
+        if not lab:
+            return jsonify({"success": False, "error": "Lab not found", "statusCode": 404}), 404
 
-            if not row:
-                return (
-                    jsonify(
-                        {
-                            "success": False,
-                            "error": "Lab not found",
-                            "statusCode": 404,
-                        }
-                    ),
-                    404,
-                )
+        tt = db.timetable.find_one({"lab_id": lab_id}, {"_id": 0, "mon_slot_id": 1, "tue_slot_id": 1, "wed_slot_id": 1, "thur_slot_id": 1, "fri_slot_id": 1}) or {}
+        slot_ids = [tt.get(_DAY_FIELD_MAP[day]) for day in _DAY_KEYS if tt.get(_DAY_FIELD_MAP[day]) is not None]
+        slots_map = _fetch_slots_map(db, slot_ids)
 
-            row["labNo"] = str(row["labNo"])
-            row["name"] = row["name"] or f"Computer Lab {row['id']}"
+        timetable = {}
+        for day in _DAY_KEYS:
+            slot_id = tt.get(_DAY_FIELD_MAP[day])
+            timetable[day] = slots_map.get(slot_id) if slot_id else None
 
-            slot_ids = [
-                row[_DAY_COLUMN_MAP[day]]
-                for day in _DAY_KEYS
-                if row[_DAY_COLUMN_MAP[day]] is not None
-            ]
-            slots_map = _fetch_slots_map(cur, slot_ids)
-
-            timetable = {}
-            for day in _DAY_KEYS:
-                slot_id = row[_DAY_COLUMN_MAP[day]]
-                timetable[day] = slots_map.get(slot_id) if slot_id else None
-
-        return (
-            jsonify(
-                {
-                    "success": True,
-                    "data": {
-                        "lab": {
-                            "id": row["id"],
-                            "labNo": row["labNo"],
-                            "name": row["name"],
-                            "floor": row["floor"],
-                        },
-                        "timetable": timetable,
-                    },
-                }
-            ),
-            200,
-        )
+        return jsonify({"success": True, "data": {"lab": {"id": lab["id"], "labNo": str(lab["id"]), "name": lab.get("name") or f"Computer Lab {lab['id']}", "floor": lab.get("floor")}, "timetable": timetable}}), 200
     except Exception as exc:
-        return (
-            jsonify(
-                {
-                    "success": False,
-                    "error": "Failed to fetch assistant lab timetable",
-                    "statusCode": 500,
-                    "details": str(exc),
-                }
-            ),
-            500,
-        )
-    finally:
-        if conn:
-            conn.close()
+        return jsonify({"success": False, "error": "Failed to fetch assistant lab timetable", "statusCode": 500, "details": str(exc)}), 500

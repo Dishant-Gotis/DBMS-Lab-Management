@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify
 
-from extensions import get_db_connection, get_dict_cursor
+from extensions import get_db
 from .common import resolve_college
 
 
@@ -35,162 +35,113 @@ def _class_name(division, year):
 
 @timetable_bp.get("/<college>/timetable")
 def get_timetable(college: str):
-    conn = None
     try:
-        conn = get_db_connection()
-        with get_dict_cursor(conn) as cur:
-            college_row = resolve_college(cur, college)
-            if not college_row:
-                return jsonify({"success": False, "error": "College not found", "statusCode": 404}), 404
+        db = get_db()
+        college_row = resolve_college(db, college)
+        if not college_row:
+            return jsonify({"success": False, "error": "College not found", "statusCode": 404}), 404
 
-            cur.execute(
-                """
-                SELECT
-                    l.id AS lab_id,
-                    l.id AS lab_no,
-                    l.name AS lab_name,
-                    l.floor,
-                    t.mon_slot_id,
-                    t.tue_slot_id,
-                    t.wed_slot_id,
-                    t.thur_slot_id,
-                    t.fri_slot_id
-                FROM labs l
-                LEFT JOIN timetable t ON t.lab_id = l.id
-                WHERE l.college_id = %s
-                ORDER BY l.id
-                """,
-                (college_row["id"],),
-            )
-            lab_rows = cur.fetchall()
+        lab_rows = list(db.labs.find({"college_id": college_row["id"]}, {"_id": 0, "id": 1, "name": 1, "floor": 1}).sort("id", 1))
+        lab_ids = [row["id"] for row in lab_rows]
 
-            slot_ids = []
-            for row in lab_rows:
-                for _, column in _DAY_COLUMNS:
-                    slot_id = row.get(column)
-                    if slot_id is not None:
-                        slot_ids.append(slot_id)
+        timetable_rows = list(
+            db.timetable.find({"lab_id": {"$in": lab_ids}}, {"_id": 0, "lab_id": 1, "mon_slot_id": 1, "tue_slot_id": 1, "wed_slot_id": 1, "thur_slot_id": 1, "fri_slot_id": 1})
+        ) if lab_ids else []
+        tt_map = {row["lab_id"]: row for row in timetable_rows}
 
-            slots_map = {}
-            if slot_ids:
-                cur.execute(
-                    """
-                    SELECT
-                        s.id,
-                        s.course_id,
-                        c.name AS course_name,
-                        c.duration_weeks,
-                        c.credits,
-                        s.faculty_id,
-                        f.name AS faculty_name,
-                        s.class_id,
-                        cls.division,
-                        cls.year
-                    FROM slots s
-                    LEFT JOIN courses c ON c.id = s.course_id
-                    LEFT JOIN faculty f ON f.id = s.faculty_id
-                    LEFT JOIN classes cls ON cls.id = s.class_id
-                    WHERE s.id = ANY(%s)
-                    """,
-                    (list(set(slot_ids)),),
-                )
-                slots_map = {row["id"]: row for row in cur.fetchall()}
+        slot_ids = []
+        for row in timetable_rows:
+            for _, column in _DAY_COLUMNS:
+                slot_id = row.get(column)
+                if slot_id is not None:
+                    slot_ids.append(slot_id)
 
-            classes_map = {}
-            courses_map = {}
-            faculty_map = {}
-            labs_map = {}
+        unique_slot_ids = list(set(slot_ids))
+        slots = list(db.slots.find({"id": {"$in": unique_slot_ids}}, {"_id": 0, "id": 1, "course_id": 1, "faculty_id": 1, "class_id": 1})) if unique_slot_ids else []
+        slots_map = {slot["id"]: slot for slot in slots}
 
-            entries = []
-            for lab_row in lab_rows:
-                lab_no = str(lab_row["lab_no"])
-                lab_name = lab_row["lab_name"] or f"Computer Lab {lab_row['lab_id']}"
-                labs_map[lab_row["lab_id"]] = {
-                    "id": lab_row["lab_id"],
-                    "labNo": lab_no,
-                    "name": lab_name,
-                    "floor": lab_row["floor"],
-                }
+        course_ids = list({slot.get("course_id") for slot in slots if slot.get("course_id") is not None})
+        faculty_ids = list({slot.get("faculty_id") for slot in slots if slot.get("faculty_id") is not None})
+        class_ids = list({slot.get("class_id") for slot in slots if slot.get("class_id") is not None})
 
-                for day_idx, (day_label, day_column) in enumerate(_DAY_COLUMNS):
-                    slot_id = lab_row.get(day_column)
-                    if slot_id is None:
-                        continue
+        courses_map = {
+            row["id"]: row
+            for row in db.courses.find({"id": {"$in": course_ids}}, {"_id": 0, "id": 1, "name": 1, "duration_weeks": 1, "credits": 1})
+        } if course_ids else {}
+        faculty_map = {
+            row["id"]: row
+            for row in db.faculty.find({"id": {"$in": faculty_ids}}, {"_id": 0, "id": 1, "name": 1})
+        } if faculty_ids else {}
+        classes_map = {
+            row["id"]: row
+            for row in db.classes.find({"id": {"$in": class_ids}}, {"_id": 0, "id": 1, "division": 1, "year": 1})
+        } if class_ids else {}
 
-                    slot = slots_map.get(slot_id)
-                    if not slot:
-                        continue
+        meta_classes = {}
+        meta_courses = {}
+        meta_faculty = {}
+        meta_labs = {}
 
-                    start_time, end_time = _TIME_WINDOWS[day_idx % len(_TIME_WINDOWS)]
-                    class_name = _class_name(slot.get("division"), slot.get("year"))
+        entries = []
+        for lab_row in lab_rows:
+            lab_no = str(lab_row["id"])
+            lab_name = lab_row.get("name") or f"Computer Lab {lab_row['id']}"
+            meta_labs[lab_row["id"]] = {"id": lab_row["id"], "labNo": lab_no, "name": lab_name, "floor": lab_row.get("floor")}
 
-                    entries.append(
-                        {
-                            "id": f"{lab_row['lab_id']}-{day_label.lower()}",
-                            "dayOfWeek": day_label,
-                            "startTime": start_time,
-                            "endTime": end_time,
-                            "labId": str(lab_row["lab_id"]),
-                            "labNo": lab_no,
-                            "labName": lab_name,
-                            "classId": str(slot["class_id"]) if slot.get("class_id") is not None else "",
-                            "className": class_name,
-                            "courseId": str(slot["course_id"]) if slot.get("course_id") is not None else "",
-                            "courseName": slot.get("course_name"),
-                            "facultyId": str(slot["faculty_id"]) if slot.get("faculty_id") is not None else "",
-                            "facultyName": slot.get("faculty_name"),
-                        }
-                    )
+            tt = tt_map.get(lab_row["id"], {})
+            for day_idx, (day_label, day_column) in enumerate(_DAY_COLUMNS):
+                slot_id = tt.get(day_column)
+                if slot_id is None:
+                    continue
 
-                    if slot.get("class_id") is not None:
-                        classes_map[slot["class_id"]] = {
-                            "id": str(slot["class_id"]),
-                            "name": class_name,
-                            "division": slot.get("division"),
-                            "year": slot.get("year"),
-                        }
-                    if slot.get("course_id") is not None:
-                        courses_map[slot["course_id"]] = {
-                            "id": str(slot["course_id"]),
-                            "name": slot.get("course_name"),
-                            "durationWeeks": slot.get("duration_weeks"),
-                            "credits": slot.get("credits"),
-                        }
-                    if slot.get("faculty_id") is not None:
-                        faculty_map[slot["faculty_id"]] = {
-                            "id": str(slot["faculty_id"]),
-                            "name": slot.get("faculty_name"),
-                        }
+                slot = slots_map.get(slot_id)
+                if not slot:
+                    continue
 
-            return (
-                jsonify(
+                course = courses_map.get(slot.get("course_id"), {})
+                faculty = faculty_map.get(slot.get("faculty_id"), {})
+                cls = classes_map.get(slot.get("class_id"), {})
+                class_name = _class_name(cls.get("division"), cls.get("year"))
+                start_time, end_time = _TIME_WINDOWS[day_idx % len(_TIME_WINDOWS)]
+
+                entries.append(
                     {
-                        "success": True,
-                        "data": {
-                            "entries": entries,
-                            "meta": {
-                                "labs": list(labs_map.values()),
-                                "classes": list(classes_map.values()),
-                                "courses": list(courses_map.values()),
-                                "faculty": list(faculty_map.values()),
-                            },
-                        },
+                        "id": f"{lab_row['id']}-{day_label.lower()}",
+                        "dayOfWeek": day_label,
+                        "startTime": start_time,
+                        "endTime": end_time,
+                        "labId": str(lab_row["id"]),
+                        "labNo": lab_no,
+                        "labName": lab_name,
+                        "classId": str(slot.get("class_id")) if slot.get("class_id") is not None else "",
+                        "className": class_name,
+                        "courseId": str(slot.get("course_id")) if slot.get("course_id") is not None else "",
+                        "courseName": course.get("name"),
+                        "facultyId": str(slot.get("faculty_id")) if slot.get("faculty_id") is not None else "",
+                        "facultyName": faculty.get("name"),
                     }
-                ),
-                200,
-            )
+                )
+
+                if slot.get("class_id") is not None:
+                    meta_classes[slot["class_id"]] = {
+                        "id": str(slot["class_id"]),
+                        "name": class_name,
+                        "division": cls.get("division"),
+                        "year": cls.get("year"),
+                    }
+                if slot.get("course_id") is not None:
+                    meta_courses[slot["course_id"]] = {
+                        "id": str(slot["course_id"]),
+                        "name": course.get("name"),
+                        "durationWeeks": course.get("duration_weeks"),
+                        "credits": course.get("credits"),
+                    }
+                if slot.get("faculty_id") is not None:
+                    meta_faculty[slot["faculty_id"]] = {
+                        "id": str(slot["faculty_id"]),
+                        "name": faculty.get("name"),
+                    }
+
+        return jsonify({"success": True, "data": {"entries": entries, "meta": {"labs": list(meta_labs.values()), "classes": list(meta_classes.values()), "courses": list(meta_courses.values()), "faculty": list(meta_faculty.values())}}}), 200
     except Exception as exc:
-        return (
-            jsonify(
-                {
-                    "success": False,
-                    "error": "Failed to fetch timetable",
-                    "statusCode": 500,
-                    "details": str(exc),
-                }
-            ),
-            500,
-        )
-    finally:
-        if conn:
-            conn.close()
+        return jsonify({"success": False, "error": "Failed to fetch timetable", "statusCode": 500, "details": str(exc)}), 500

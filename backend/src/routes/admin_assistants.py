@@ -1,13 +1,15 @@
 from flask import Blueprint, request, jsonify
-from extensions import get_db_connection, get_dict_cursor
+from pymongo import ReturnDocument
+
+from extensions import get_db, get_next_sequence
+from .api_utils import bad_request, conflict, get_db_and_college, not_found, require_role, server_error
 
 admin_assistants_bp = Blueprint("admin_assistants", __name__)
 
+
 def _require_admin_role():
-    role = request.headers.get("X-Role", "").lower()
-    if role != "admin":
-        return jsonify({"success": False, "error": "Unauthorized", "statusCode": 403}), 403
-    return None
+    return require_role("admin", "Unauthorized")
+
 
 @admin_assistants_bp.get("/<college>/admin/assistants")
 def get_assistants(college: str):
@@ -15,30 +17,36 @@ def get_assistants(college: str):
     if guard:
         return guard
 
-    conn = None
     try:
-        conn = get_db_connection()
-        with get_dict_cursor(conn) as cur:
-            cur.execute("""
-                SELECT
-                    a.id,
-                    a.name,
-                    a.email,
-                    a.phone,
-                    a.password,
-                    l.floor AS "assignedLabNo"
-                FROM assistants a
-                LEFT JOIN labs l ON a.lab_id = l.id
-                ORDER BY a.name ASC
-            """)
-            rows = cur.fetchall()
+        db, college_row, err = get_db_and_college(college)
+        if err:
+            return err
 
-        return jsonify({"success": True, "data": rows}), 200
+        labs = list(db.labs.find({"college_id": college_row["id"]}, {"_id": 0, "id": 1, "floor": 1}))
+        lab_ids = [lab["id"] for lab in labs]
+        floor_map = {lab["id"]: lab.get("floor") for lab in labs}
+
+        rows = list(
+            db.assistants.find({"lab_id": {"$in": lab_ids}}, {"_id": 0, "id": 1, "name": 1, "email": 1, "phone": 1, "password": 1, "lab_id": 1}).sort("name", 1)
+        ) if lab_ids else []
+
+        data = []
+        for row in rows:
+            data.append(
+                {
+                    "id": row.get("id"),
+                    "name": row.get("name"),
+                    "email": row.get("email"),
+                    "phone": row.get("phone"),
+                    "password": row.get("password"),
+                    "assignedLabNo": floor_map.get(row.get("lab_id")),
+                }
+            )
+
+        return jsonify({"success": True, "data": data}), 200
     except Exception as exc:
-        return jsonify({"success": False, "error": "Failed to fetch assistants", "statusCode": 500, "details": str(exc)}), 500
-    finally:
-        if conn:
-            conn.close()
+        return server_error("Failed to fetch assistants", exc)
+
 
 @admin_assistants_bp.post("/<college>/admin/assistants")
 def create_assistant(college: str):
@@ -48,45 +56,40 @@ def create_assistant(college: str):
 
     payload = request.get_json(silent=True) or {}
     name = payload.get("name")
-    email = payload.get("email")
-    phone = payload.get("phone", "000-000-0000") # Required by schema
+    email = (payload.get("email") or "").strip().lower()
+    phone = payload.get("phone", "000-000-0000")
     password = payload.get("password")
-
-
     lab_id = payload.get("labId")
 
     if not name or not email or not password:
-        return jsonify({"success": False, "error": "Missing required fields (name, email, password)", "statusCode": 400}), 400
+        return bad_request("Missing required fields (name, email, password)")
 
-    conn = None
     try:
-        conn = get_db_connection()
-        with get_dict_cursor(conn) as cur:
-            if not lab_id:
-                cur.execute("SELECT id FROM labs LIMIT 1")
-                lab_row = cur.fetchone()
-                if not lab_row:
-                    return jsonify({"success": False, "error": "Cannot create assistant: No labs exist in the database to satisfy lab_id constraint. Please create a lab first.", "statusCode": 400}), 400
-                lab_id = lab_row["id"]
+        db, college_row, err = get_db_and_college(college)
+        if err:
+            return err
 
-            cur.execute("""
-                INSERT INTO assistants (name, email, phone, password, lab_id)
-                VALUES (%s, %s, %s, %s, %s)
-                RETURNING id, name, email, phone, password, lab_id AS "labId"
-            """, (name, email, phone, password, lab_id))
-            row = cur.fetchone()
+        if db.assistants.find_one({"$or": [{"email": email}, {"phone": phone}]}, {"_id": 1}):
+            return conflict("An assistant with this email or phone already exists")
 
-        conn.commit()
-        return jsonify({"success": True, "data": row}), 201
+        if not lab_id:
+            default_lab = db.labs.find_one({"college_id": college_row["id"]}, {"_id": 0, "id": 1}, sort=[("id", 1)])
+            if not default_lab:
+                return bad_request("Cannot create assistant: create a lab first.")
+            lab_id = default_lab["id"]
+        else:
+            if not db.labs.find_one({"id": int(lab_id), "college_id": college_row["id"]}, {"_id": 1}):
+                return not_found("Lab not found")
+            lab_id = int(lab_id)
+
+        assistant_id = get_next_sequence("assistants")
+        row = {"id": assistant_id, "name": name, "email": email, "phone": phone, "password": password, "lab_id": lab_id}
+        db.assistants.insert_one(row)
+
+        return jsonify({"success": True, "data": {"id": assistant_id, "name": name, "email": email, "phone": phone, "password": password, "labId": lab_id}}), 201
     except Exception as exc:
-        if conn:
-            conn.rollback()
-        if "unique constraint" in str(exc).lower():
-             return jsonify({"success": False, "error": "An assistant with this email or phone already exists", "statusCode": 409}), 409
-        return jsonify({"success": False, "error": "Failed to create assistant", "statusCode": 500, "details": str(exc)}), 500
-    finally:
-        if conn:
-            conn.close()
+        return server_error("Failed to create assistant", exc)
+
 
 @admin_assistants_bp.delete("/<college>/admin/assistants/<int:assistant_id>")
 def delete_assistant(college: str, assistant_id: int):
@@ -94,22 +97,15 @@ def delete_assistant(college: str, assistant_id: int):
     if guard:
         return guard
 
-    conn = None
     try:
-        conn = get_db_connection()
-        with get_dict_cursor(conn) as cur:
-            cur.execute("DELETE FROM assistants WHERE id = %s RETURNING id", (assistant_id,))
-            if not cur.fetchone():
-                return jsonify({"success": False, "error": "Assistant not found", "statusCode": 404}), 404
-        conn.commit()
+        db = get_db()
+        result = db.assistants.delete_one({"id": assistant_id})
+        if result.deleted_count == 0:
+            return not_found("Assistant not found")
         return jsonify({"success": True, "message": "Assistant deleted"}), 200
     except Exception as exc:
-        if conn:
-            conn.rollback()
-        return jsonify({"success": False, "error": "Failed to delete assistant", "statusCode": 500, "details": str(exc)}), 500
-    finally:
-        if conn:
-            conn.close()
+        return server_error("Failed to delete assistant", exc)
+
 
 @admin_assistants_bp.put("/<college>/admin/assistants/<int:assistant_id>/assign")
 def assign_assistant_lab(college: str, assistant_id: int):
@@ -121,33 +117,26 @@ def assign_assistant_lab(college: str, assistant_id: int):
     lab_id = payload.get("labId")
 
     if not lab_id:
-        return jsonify({"success": False, "error": "Missing labId", "statusCode": 400}), 400
+        return bad_request("Missing labId")
 
-    conn = None
     try:
-        conn = get_db_connection()
-        with get_dict_cursor(conn) as cur:
-            cur.execute("SELECT id FROM labs WHERE id = %s", (lab_id,))
-            if not cur.fetchone():
-                return jsonify({"success": False, "error": "Lab not found", "statusCode": 404}), 404
+        db, college_row, err = get_db_and_college(college)
+        if err:
+            return err
 
-            cur.execute("""
-                UPDATE assistants
-                SET lab_id = %s
-                WHERE id = %s
-                RETURNING id, name, lab_id AS "labId"
-            """, (lab_id, assistant_id))
+        lab = db.labs.find_one({"id": int(lab_id), "college_id": college_row["id"]}, {"_id": 0, "id": 1})
+        if not lab:
+            return not_found("Lab not found")
 
-            row = cur.fetchone()
-            if not row:
-                return jsonify({"success": False, "error": "Assistant not found", "statusCode": 404}), 404
+        result = db.assistants.find_one_and_update(
+            {"id": assistant_id},
+            {"$set": {"lab_id": int(lab_id)}},
+            projection={"_id": 0, "id": 1, "name": 1, "lab_id": 1},
+            return_document=ReturnDocument.AFTER,
+        )
+        if not result:
+            return not_found("Assistant not found")
 
-        conn.commit()
-        return jsonify({"success": True, "data": row}), 200
+        return jsonify({"success": True, "data": {"id": result["id"], "name": result["name"], "labId": result.get("lab_id")}}), 200
     except Exception as exc:
-        if conn:
-            conn.rollback()
-        return jsonify({"success": False, "error": "Failed to assign lab to assistant", "statusCode": 500, "details": str(exc)}), 500
-    finally:
-        if conn:
-            conn.close()
+        return server_error("Failed to assign lab to assistant", exc)
